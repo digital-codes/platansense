@@ -1,77 +1,87 @@
-# Ignore Composer dependencies
-/vendor/
+# Ignore Composer dependencies in all subdirectories
+**/vendor/
 
 # Ignore Composer lock file (optional)
-/composer.lock
+**/composer.lock
 
 # Ignore PHPStorm project files
-/.idea/
+**/.idea/
 
 # Ignore PHPUnit test results
-/phpunit.xml
-/phpunit.xml.dist
+**/phpunit.xml
+**/phpunit.xml.dist
 
 # Ignore logs and cache
-*.log
-/cache/
-/tmp/
+**/*.log
+**/cache/
+**/tmp/
 
 # Ignore environment files
-.env
-.env.*
+**/.env
+**/.env.*
 
 # Ignore coverage reports
-/coverage/
+**/coverage/
 
 # Ignore build artifacts
-/build/
+**/build/
 
 # Ignore Python bytecode
-__pycache__/
-*.py[cod]
-*$py.class
+**/__pycache__/
+**/*.py[cod]
+**/$py.class
 
 # Ignore virtual environments
-venv/
-ENV/
-env/
-.venv/
-.python-version
+**/venv/
+**/ENV/
+**/env/
+**/.venv/
+**/.python-version
 
 # Ignore pip log and distribution files
-pip-log.txt
-pip-delete-this-directory.txt
-dist/
-build/
-*.egg-info/
-.eggs/
+**/ pip-log.txt
+**/pip-delete-this-directory.txt
+**/dist/
+**/build/
+**/*.egg-info/
+**/.eggs/
 
 # Ignore test and coverage files
-.coverage
-.tox/
-.nox/
-.pytest_cache/
-.cache/
+**/.coverage
+**/.tox/
+**/.nox/
+**/.pytest_cache/
+**/.cache/
 
 # Ignore Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
 # Ignore mypy and other Python tool files
-.mypy_cache/
-.dmypy.json
-.pyre/
-.pytype/
+**/.mypy_cache/
+**/.dmypy.json
+**/.pyre/
+**/.pytype/
 
 
 # Ignore all .ini files
-*.ini
+**/*.ini
 
 # Ignore all files starting with 'private'
-private*
+**/private*
 
 # Ignore log files
-*.log
-logs/
-log/
-*.out
-*.err
+**/*.log
+**/logs/
+**/log/
+**/*.out
+**/*.err
+
+# Ignore audio files everywhere
+**/*.wav
+**/*.raw
+**/*.adpcm
+**/*.ogg
+**/*.mp3
+
+# Ignore all files and directories starting with test, Test, or TEST (case-insensitive)
+**/[tT][eE][sS][tT]*

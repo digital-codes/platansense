@@ -1,0 +1,56 @@
+german text input. categorize into one of the following: mood, personal info, climate related, policiy related, future prospects, plans or activities. finish transcipt with "category: name of category". if not sure, finish with "category: unknown"
+
+
+mistralai/Voxtral-Small-24B-2507
+mistralai/Voxtral-Mini-3B-2507  (faster)
+
+Hallo Platane, wie geht's? Wer bist du? Wie heißt du? Was machst du so? Wie geht's weiter?
+
+
+Qwen/Qwen3-14B
+<think> Okay, let's see. The user sent a German text input and wants me to categorize it into one of the specified categories. The input is: "Hallo Platane, wie geht's? Wer bist du? Wie heißt du? Was machst du so? Wie geht's weiter?"
+
+First, I need to understand what each part of the message is asking. The user is greeting Platane and asking how they're doing. Then they ask "Wer bist du?" which translates to "Who are you?" and "Wie heißt du?" which is "What's your name?" followed by "Was machst du so?" meaning "What do you do?" and "Wie geht's weiter?" which is "What's next?" or "How will it go on?"
+
+Looking at the categories provided: mood, personal info, climate related, policy related, future prospects, plans or activities, and unknown.
+
+The questions are about the identity of Platane, their name, what they do, and what's next. These are all personal information questions. "Wie geht's?" is about mood, but the rest are about personal details. However, the main focus here is on gathering personal information about Platane. The "Wie geht's weiter?" could relate to future prospects, but the majority of the questions are about personal info.
+
+I should check if any of the questions relate to other categories. "Wie geht's?" is about mood, but the user is asking about Platane's mood, not their own. The other questions are clearly about personal information. So the category should be personal info. I don't see any climate or policy-related questions here. Future prospects might be a stretch for "Wie geht's weiter?", but since most are personal, the main category is personal info. </think>
+
+Hallo Platane, wie geht's? Wer bist du? Wie heißt du? Was machst du so? Wie geht's weiter?
+category: personal info
+
+
+google/gemma-3-12b-it
+very quick. qwen more precise but slower
+
+
+
+
+german text input. categorize into one of the following: mood, personal info, climate related, policiy related, future prospects, plans or activities. finish transcipt with "category: name of category" if more than one category applies, finish with "category: category1, category2, category3".  List categories in decreasing importance. do not list more than 3 categories. if not sure, finish with "category: unknown"
+
+
+Qwen2.5-7B-Instruct
+
+Wer bist du? - Wie heißt du? - Was machst du so? category: personal info
+
+
+Qwen2.5-72B-Instruct
+
+Hallo! Ich bin ein assistierender KI-Chatbot namens Platane. Schön, von dir zu hören!
+
+    Wie geht's? - Das ist eine Frage nach meinem Befinden, also nach meiner Stimmung.
+    Wer bist du? - Das ist eine persönliche Frage.
+    Wie heißt du? - Auch eine persönliche Frage.
+    Was machst du so? - Das ist eine Frage nach Aktivitäten.
+    Wie geht's weiter? - Das könnte auf zukünftige Pläne oder Aktivitäten hindeuten.
+
+category: mood, personal info, plans or activities
+
+
+------------
+you are fluent in plant biology, environmental science and city development. answer to all questions in german language and simple, concise sentences despite the academic background.
+
+
+

@@ -1,0 +1,2 @@
+http -v -j localhost:9010/transscribe text="Hallo Platane, wie gehts? Wie heißt Du und was machst du so?" file="plata1"
+

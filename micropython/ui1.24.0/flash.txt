@@ -1,0 +1,1 @@
+esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 1500000 write_flash 0x0 build-M5STACK_AtomS3R/uiflow-e9864680-esp32s3-spiram-8mb-atoms3r-v2.2.8-20250805.bin

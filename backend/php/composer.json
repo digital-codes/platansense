@@ -1,0 +1,6 @@
+{
+    "require": {
+        "lcobucci/jwt": "^5.5",
+        "lcobucci/clock": "^3.3"
+    }
+}
