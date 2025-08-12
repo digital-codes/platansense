@@ -9,18 +9,29 @@ use Lcobucci\JWT\Token\Parser;
 use Lcobucci\JWT\Signer\Key\InMemory;
 require 'vendor/autoload.php';
 
+
+header('Content-Type: application/json');
+
+
 // $key   = InMemory::plainText(random_bytes(32));
 $key = InMemory::plainText(b"secretSensorkeyForJwTTestingAndO");
 
-$devKey = "00112233445566778899aabbccddeeff";
+//$devKey = "00112233445566778899aabbccddeeff";
 
-$identifiedBy = 'sensor1';
-$relatedTo = 'component1';
+// $identifiedBy = 'sensor1';
+$relatedTo = 'Platanen Sensor';
 $issuedBy = 'http://example.com';
 
+$devicesFile = '/var/www/files/platane/devices.json';
+if (file_exists($devicesFile)) {
+    $json = file_get_contents($devicesFile);
+    $devices = json_decode($json, true);
+} else {
+    http_response_code(500);
+    echo json_encode(["error" => "Devices file not found"]);
+    exit;
+}
 
-
-header('Content-Type: application/json');
 
 
 // ===== INPUT =====
@@ -36,11 +47,14 @@ $command = $input['command'] ?? null;
 // 1) JOIN REQUEST
 if ($command === "join" && isset($input['id'])) {
     $id = $input['id'];
-    if ($id != $identifiedBy) {
+    $identifiedBy = $id;
+    if (!isset($devices[$id])) {
         http_response_code(401);
-        echo json_encode(["status" => "not authorized1"]);
+        echo json_encode(["status" => "not authorized0"]);
         exit;
     }
+    $devKey = $devices[$id];
+    $identifiedBy = "Sensor_" . $id;
 
     $challenge = bin2hex(openssl_random_pseudo_bytes(16));
     $iv = bin2hex(openssl_random_pseudo_bytes(16));
@@ -64,15 +78,14 @@ if ($command === "join" && isset($input['id'])) {
 // 2) CHALLENGE RESPONSE
 if ($command === "challenge" && isset($input['id'], $input['session'], $input['challenge'])) {
     $id = $input['id'];
-    if ($id != $identifiedBy) {
+    $sessionId = $input['session'];
+
+    $filePath = "/tmp/challenge_{$id}_{$sessionId}.json";
+    if (!file_exists($filePath)) {
         http_response_code(401);
         echo json_encode(["status" => "not authorized2"]);
         exit;
     }
-
-    $sessionId = $input['session'];
-
-    $filePath = "/tmp/challenge_{$id}_{$sessionId}.json";
     $stored = json_decode(@file_get_contents($filePath), true);
 
     // Same expiry check
@@ -82,12 +95,15 @@ if ($command === "challenge" && isset($input['id'], $input['session'], $input['c
         exit;
     }
 
+    $devKey = $devices[$id];
     $keyBin = hex2bin($devKey);
     $ivBin = hex2bin($stored['iv']);
+    $identifiedBy = "Sensor_" . $id;
 
     $expected = openssl_encrypt(
         hex2bin($stored['challenge']),
-        "AES-256-CBC",  // was 128
+        //"AES-256-CBC",  // was 128
+        "AES-128-CBC",  // was 128
         $keyBin,
         OPENSSL_RAW_DATA,
         $ivBin
@@ -105,8 +121,9 @@ if ($command === "challenge" && isset($input['id'], $input['session'], $input['c
 }
 
 // 3) DATA PACKET
-if ($command === "data" && isset($input['token'], $input['data'])) {
+if ($command === "data" && isset($input['id']) && isset($input['token'], $input['data'])) {
     $token = $input['token'];
+    $identifiedBy = "Sensor_" . $input['id'];
     try {
         if (!validateToken($token, $relatedTo, $issuedBy, $identifiedBy, $key)) {
             throw new Exception("Invalid token");
