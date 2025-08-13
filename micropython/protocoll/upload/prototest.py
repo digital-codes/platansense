@@ -33,59 +33,13 @@ class PlataneDevice:
         pkcs7_pad(msg_bytes): Pads the given bytes using PKCS#7 padding.
     """
 
+    def __init__(self, namespace):
         """
         Initializes the PlataneDevice instance and loads configuration from NVS.
 
         Args:
             namespace (str): The NVS namespace to use.
         """
-        ...
-
-        """
-        Loads device configuration parameters from NVS storage into instance attributes.
-
-        Sets deviceId, deviceKey, baseUrl, ssid, and password.
-        """
-        ...
-
-        """
-        Connects the device to the WiFi network using the stored SSID and password.
-
-        Waits until the network interface is active and the connection is established.
-        """
-        ...
-
-        """
-        Authenticates the device with the server to obtain an access token.
-
-        Performs a challenge-response protocol using AES encryption.
-        Returns:
-            str or None: The authentication token if successful, otherwise None.
-        """
-        ...
-
-        """
-        Sends sensor data to the server using the authentication token.
-
-        Args:
-            sensor_data (dict): The sensor data to send.
-
-        Returns:
-            str or None: The UUID of the uploaded data if successful, otherwise None.
-        """
-        ...
-
-        """
-        Pads the input bytes using PKCS#7 padding to a 16-byte boundary.
-
-        Args:
-            msg_bytes (bytes): The message bytes to pad.
-
-        Returns:
-            bytes: The padded message.
-        """
-        ...
-    def __init__(self, namespace):
         self.namespace = namespace
         self.nvs = esp32.NVS(namespace)
         self.deviceId = None
