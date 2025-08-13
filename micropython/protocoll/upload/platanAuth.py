@@ -6,7 +6,7 @@ import network
 from cryptolib import aes as AES
 import esp32
 
-class PlataneDevice:
+class PlatanAuth:
     """
     Represents a Platane sensor device for secure communication and data upload using MicroPython.
 
@@ -35,7 +35,7 @@ class PlataneDevice:
 
     def __init__(self, namespace):
         """
-        Initializes the PlataneDevice instance and loads configuration from NVS.
+        Initializes the PlatanAuth instance and loads configuration from NVS.
 
         Args:
             namespace (str): The NVS namespace to use.
@@ -226,7 +226,7 @@ class PlataneDevice:
 
 if __name__ == "__main__":
     import sys
-    device = PlataneDevice("platane")
+    device = PlatanAuth("platane")
     device.connect_wifi()
     token = device.get_token()
     print("Token received:", token)
