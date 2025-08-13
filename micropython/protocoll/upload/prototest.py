@@ -7,6 +7,84 @@ from cryptolib import aes as AES
 import esp32
 
 class PlataneDevice:
+    """
+    Represents a Platane sensor device for secure communication and data upload using MicroPython.
+
+    This class handles device configuration loading from NVS, WiFi connection, authentication with a remote server,
+    and secure data transmission.
+
+    Args:
+        namespace (str): The NVS namespace to use for device configuration.
+
+    Attributes:
+        namespace (str): The NVS namespace.
+        nvs (esp32.NVS): The NVS instance for persistent storage.
+        deviceId (str): The unique device identifier.
+        deviceKey (str): The device's secret key (hex-encoded).
+        baseUrl (str): The base URL for server communication.
+        ssid (str): The WiFi SSID.
+        password (str): The WiFi password.
+        token (str): The authentication token for server communication.
+
+    Methods:
+        connect_wifi(): Connects the device to the configured WiFi network.
+        get_token(): Performs authentication with the server and retrieves an access token.
+        send_data(sensor_data): Sends sensor data to the server using the authentication token.
+        pkcs7_pad(msg_bytes): Pads the given bytes using PKCS#7 padding.
+    """
+
+        """
+        Initializes the PlataneDevice instance and loads configuration from NVS.
+
+        Args:
+            namespace (str): The NVS namespace to use.
+        """
+        ...
+
+        """
+        Loads device configuration parameters from NVS storage into instance attributes.
+
+        Sets deviceId, deviceKey, baseUrl, ssid, and password.
+        """
+        ...
+
+        """
+        Connects the device to the WiFi network using the stored SSID and password.
+
+        Waits until the network interface is active and the connection is established.
+        """
+        ...
+
+        """
+        Authenticates the device with the server to obtain an access token.
+
+        Performs a challenge-response protocol using AES encryption.
+        Returns:
+            str or None: The authentication token if successful, otherwise None.
+        """
+        ...
+
+        """
+        Sends sensor data to the server using the authentication token.
+
+        Args:
+            sensor_data (dict): The sensor data to send.
+
+        Returns:
+            str or None: The UUID of the uploaded data if successful, otherwise None.
+        """
+        ...
+
+        """
+        Pads the input bytes using PKCS#7 padding to a 16-byte boundary.
+
+        Args:
+            msg_bytes (bytes): The message bytes to pad.
+
+        Returns:
+            bytes: The padded message.
+        """
+        ...
     def __init__(self, namespace):
         self.namespace = namespace
         self.nvs = esp32.NVS(namespace)
@@ -19,6 +97,18 @@ class PlataneDevice:
         self._load_nvs()
 
     def _load_nvs(self):
+        """
+        Loads configuration values from non-volatile storage (NVS) into instance attributes.
+
+        Retrieves the following blobs from NVS:
+            - "deviceId": Sets self.deviceId (str or None)
+            - "deviceKey": Sets self.deviceKey (str or None)
+            - "baseurl": Sets self.baseUrl (str or None), formatted as an HTTPS URL with "/sensorUpload.php" appended
+            - "ssid": Sets self.ssid (str or None)
+            - "passwd": Sets self.password (str, empty string if not found)
+
+        Each value is decoded from UTF-8. If a value is not found (length <= 0), the corresponding attribute is set to None or an empty string as appropriate.
+        """
         buf = bytearray(64)
         l = self.nvs.get_blob("deviceId", buf)
         self.deviceId = buf[:l].decode('utf-8') if l > 0 else None
@@ -32,6 +122,20 @@ class PlataneDevice:
         self.password = buf[:l].decode('utf-8') if l > 0 else ""
 
     def connect_wifi(self):
+        """
+        Connects the device to a Wi-Fi network using the provided SSID and password.
+
+        This method initializes the network interface in station mode, waits for it to become active,
+        and then attempts to connect to the specified Wi-Fi network. It blocks execution until the
+        network interface is active and the connection is established. Once connected, it prints the
+        network configuration.
+
+        Raises:
+            Any exceptions raised by the underlying network or time modules.
+
+        Note:
+            Assumes that `self.ssid` and `self.password` are set to valid Wi-Fi credentials.
+        """
         nic = network.WLAN(network.WLAN.IF_STA)
         while not nic.active():
             print("Waiting for network interface to become active...")
@@ -43,6 +147,24 @@ class PlataneDevice:
         print("Network connected:", nic.ifconfig())
 
     def get_token(self):
+        """
+        Authenticates the device with the server and retrieves an authentication token.
+
+        This method performs a two-step authentication process:
+        1. Sends a "join" request to the server to receive a challenge and IV.
+        2. Encrypts the challenge using AES-CBC with the device key and IV, then sends the encrypted challenge back to the server.
+        If successful, stores and returns the authentication token.
+
+        Returns:
+            str or None: The authentication token if successful, otherwise None.
+
+        Side Effects:
+            - Updates self.token with the received token or None on failure.
+            - Prints error messages on failure.
+
+        Raises:
+            None: All exceptions are handled internally.
+        """
         # Step 1: Join
         resp = requests.post(self.baseUrl, json={
             "command": "join",
@@ -63,7 +185,7 @@ class PlataneDevice:
             self.token = None
             return None
 
-        # Step 3: Encrypt challenge
+        # Step 2: Encrypt challenge
         try:
             key_bin = binascii.unhexlify(self.deviceKey)
             iv_bin = binascii.unhexlify(iv_hex)
@@ -98,6 +220,22 @@ class PlataneDevice:
         return self.token
 
     def send_data(self, sensor_data):
+        """
+        Sends sensor data to the server using a POST request.
+
+        Args:
+            sensor_data (dict): The sensor data to be sent to the server.
+
+        Returns:
+            str or None: The UUID returned by the server if the request is successful, otherwise None.
+
+        Side Effects:
+            Prints error messages if the token is missing or if the request fails.
+            Resets the token to None if the request fails.
+
+        Notes:
+            Requires a valid authentication token. Call get_token() before using this method.
+        """
         if not self.token:
             print("No token, call get_token() first.")
             return None
@@ -119,6 +257,15 @@ class PlataneDevice:
 
     @staticmethod
     def pkcs7_pad(msg_bytes):
+        """
+        Applies PKCS#7 padding to the given byte sequence to ensure its length is a multiple of 16 bytes.
+
+        Args:
+            msg_bytes (bytes): The input byte sequence to be padded.
+
+        Returns:
+            bytes: The padded byte sequence, with PKCS#7 padding added to reach a multiple of 16 bytes.
+        """
         pad_len = 16 - (len(msg_bytes) % 16)
         return msg_bytes + bytes([pad_len] * pad_len)
 
