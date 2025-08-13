@@ -1,31 +1,85 @@
 import requests
 import os 
+import binascii
+import json
+import random
+import time
+
+# get platform and intialize base settings
 try:
-    platform = os.popen("uname").read().strip().lower()
+    platform = os.uname().lower() # popen("uname").read().strip().lower()
     if "linux" in platform:
+        platform = "linux"
         print("Using Linux")
         # import pycryptodome and pycryptodomex. do not use pycrypto
         from Crypto.Cipher import AES
         aesMode = AES.MODE_CBC 
         import secrets
         import base64
+        baseUrl = "http://localhost:9000/sensorUpload.php"
+        deviceId = "1"
+        deviceKey = "00112233445566778899aabbccddeeff"  # hex
     else:
-        raise "No uname"
-except ImportError:
-    platform = "unknown"
-    print("Using default")
+        raise Exception("No uname")
+except (ImportError, Exception) as e:
+    platform = "esp32" # assume esp32 if uname fails
+    print("Using ESP32 as default")
     from cryptolib import aes as AES
     aesMode = 2  # AES.MODE_CBC
-
-import binascii
-import json
-import random
+    # try to import esp32 for NVS
+    try:
+        import esp32
+        namespace = "platane"
+        nvs = esp32.NVS(namespace)
+        buf = bytearray(64)
+        l = nvs.get_blob("deviceId", buf)
+        if l > 0:
+            deviceId = buf[:l].decode('utf-8')
+        else:
+            deviceId = None
+        l = nvs.get_blob("deviceKey", buf)
+        if l > 0:
+            deviceKey = buf[:l].decode('utf-8')
+            print(f"Found deviceKey: {deviceKey}")
+        else:
+            deviceKey = None
+        l = nvs.get_blob("baseurl", buf)
+        if l > 0:
+            baseUrl = f"https://{buf[:l].decode('utf-8')}/sensorUpload.php"
+        else:
+            baseUrl = None
+    except ImportError:
+        print("No esp32 module found, using defaults")
+        exit(1)
 
 MODE = "real" # "fake"
 
-BACKEND_URL = "http://localhost:9000/sensorUpload.php"
-DEVICE_ID = "1"
-DEVICE_KEY = "00112233445566778899aabbccddeeff"  # hex
+if MODE == "real":
+    import network
+    nic = network.WLAN(network.WLAN.IF_STA)
+    l = nvs.get_blob("ssid", buf)
+    if l == 0:
+        print("No ssid found, setting new credentials.")
+        exit(1)
+    ssid = buf[:l].decode('utf-8')
+
+    l = nvs.get_blob("passwd", buf)
+    if l > 0:
+        password = buf[:l].decode('utf-8')
+    else:
+        password = ""
+    
+    while not nic.active():
+        print("Waiting for network interface to become active...")
+        time.sleep(1)
+    nic.connect(ssid, password)
+    while not nic.isconnected():
+        print("Waiting for network connection...")
+        time.sleep(1)
+        
+    print("Network connected:", nic.ifconfig()) 
+
+
 
 def pkcs7_pad(msg_bytes):
     pad_len = 16 - (len(msg_bytes) % 16)
@@ -33,10 +87,9 @@ def pkcs7_pad(msg_bytes):
 
 # Step 1: Join
 if MODE != "fake":
-    resp = requests.post(BACKEND_URL, json={
+    resp = requests.post(f"{baseUrl}/sensorUpload.php", json={
         "command": "join",
-        "id": DEVICE_ID,
-        "key": DEVICE_KEY
+        "id": deviceId
     })
     if resp.status_code != 200:
         print("Join failed:", resp.text)
@@ -59,11 +112,11 @@ session_id = join_data.get('session', None)
 
 
 # Step 3: Encrypt challenge
-key_bin = binascii.unhexlify(DEVICE_KEY)
+key_bin = binascii.unhexlify(deviceKey)
 iv_bin = binascii.unhexlify(iv_hex)
 challenge_bin = binascii.unhexlify(challenge_hex)
 
-if platform == "unknown":
+if platform != "linux":
     aes = AES(key_bin, aesMode, iv_bin)
 else:
     aes = AES.new(key_bin, aesMode, iv_bin)
@@ -74,9 +127,9 @@ encrypted = aes.encrypt(padded_msg)
 encrypted_hex = binascii.hexlify(encrypted).decode()
 
 if MODE != "fake":
-    resp = requests.post(BACKEND_URL, json={
+    resp = requests.post(baseUrl, json={
         "command": "challenge",
-        "id": DEVICE_ID,
+        "id": deviceId,
         "challenge": encrypted_hex,
         "session": session_id
     })
@@ -103,10 +156,10 @@ print("Got JWT:", token)
 sensor_data = {"temperature": 23.5, "humidity": 40}
 
 if MODE != "fake":
-    resp = requests.post(BACKEND_URL, json={
+    resp = requests.post(baseUrl, json={
         "command": "data",
-        "id": DEVICE_ID,
-       "token": token,
+        "id": deviceId,
+        "token": token,
         "data": sensor_data
     })
     if resp.status_code != 200:
@@ -122,3 +175,19 @@ else:
 
 print("Data UUID:", data_result.get('uuid', 'N/A'))
 
+
+if MODE != "fake":
+    while True:
+        print("Sending data")
+        resp = requests.post(baseUrl, json={
+            "command": "data",
+            "id": deviceId,
+            "token": token,
+            "data": sensor_data
+        })
+        if resp.status_code != 200:
+            print("Data failed:", resp.text)
+            raise SystemExit
+        data_result = resp.json()
+        resp.close()
+        time.sleep(10)
