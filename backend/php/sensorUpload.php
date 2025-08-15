@@ -1,26 +1,29 @@
 <?php
 declare(strict_types=1);
 
+require 'vendor/autoload.php';
+
 require_once __DIR__ . '/buildToken.php';
 require_once __DIR__ . '/checkToken.php';
 
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Token\Parser;
 use Lcobucci\JWT\Signer\Key\InMemory;
-require 'vendor/autoload.php';
 
 
 header('Content-Type: application/json');
 
 
 // $key   = InMemory::plainText(random_bytes(32));
-$key = InMemory::plainText(b"secretSensorkeyForJwTTestingAndO");
-
-//$devKey = "00112233445566778899aabbccddeeff";
-
-// $identifiedBy = 'sensor1';
-$relatedTo = 'Platanen Sensor';
-$issuedBy = 'http://example.com';
+$config = parse_ini_file('/var/www/files/platane/config.ini', true);
+if (!$config || !isset($config['JWT']['key']) || !isset($config['JWT']['relatedTo']) || !isset($config['JWT']['issuedBy'])) {
+    http_response_code(500);
+    echo json_encode(["error" => "JWT config invalid"]);
+    exit;
+}
+$key = InMemory::plainText($config['JWT']['key']);
+$relatedTo = $config['JWT']['relatedTo'];
+$issuedBy = $config['JWT']['issuedBy'];
 
 $devicesFile = '/var/www/files/platane/devices.json';
 if (file_exists($devicesFile)) {
@@ -32,6 +35,7 @@ if (file_exists($devicesFile)) {
     exit;
 }
 
+$audioDir = __DIR__ . "/audio/";
 
 
 // ===== INPUT =====
@@ -144,13 +148,16 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
     }
     $id = $parsedToken->claims()->get('sensor');
 
-    $uuid = uniqid($id . "_", true);
+    $uuid = uniqid($identifiedBy . "_", true);
     try {
-        file_put_contents("/tmp/data_$uuid.json", json_encode([
-            "device" => $id,
-            "data" => $input['data'],
-            "time" => time()
-        ]));
+        $audioData = base64_decode($input['data'], true);
+        if ($audioData === false) {
+            throw new Exception("Invalid base64 audio data");
+        }
+        $audioFile = $audioDir . $uuid . ".adpcm";
+        if (file_put_contents($audioFile, $audioData) === false) {
+            throw new Exception("Failed to write audio file");
+        }
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(["error" => "Failed to save data"]);

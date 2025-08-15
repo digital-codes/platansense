@@ -27,9 +27,10 @@ class PlatanAuth:
         token (str): The authentication token for server communication.
 
     Methods:
+        get_id(): Returns the device ID.
+        get_baseUrl(): Returns the base URL for server communication.
         connect_wifi(): Connects the device to the configured WiFi network.
         get_token(): Performs authentication with the server and retrieves an access token.
-        send_data(sensor_data): Sends sensor data to the server using the authentication token.
         pkcs7_pad(msg_bytes): Pads the given bytes using PKCS#7 padding.
     """
 
@@ -69,7 +70,8 @@ class PlatanAuth:
         l = self.nvs.get_blob("deviceKey", buf)
         self.deviceKey = buf[:l].decode('utf-8') if l > 0 else None
         l = self.nvs.get_blob("baseurl", buf)
-        self.baseUrl = f"https://{buf[:l].decode('utf-8')}/sensorUpload.php" if l > 0 else None
+        
+        self.baseUrl = f"https://{buf[:l].decode('utf-8')}" if l > 0 else None
         l = self.nvs.get_blob("ssid", buf)
         self.ssid = buf[:l].decode('utf-8') if l > 0 else None
         l = self.nvs.get_blob("passwd", buf)
@@ -100,6 +102,30 @@ class PlatanAuth:
             time.sleep(1)
         print("Network connected:", nic.ifconfig())
 
+
+    def get_baseUrl(self):
+        """
+        Returns the base URL for server communication.
+
+        This method retrieves the base URL stored in the instance attribute `self.baseUrl`.
+
+        Returns:
+            str or None: The base URL if set, otherwise None.
+        """
+        return self.baseUrl
+
+    def get_id(self):
+        """
+        Returns the device ID.
+
+        This method retrieves the device ID stored in the instance attribute `self.deviceId`.
+
+        Returns:
+            str or None: The device ID if set, otherwise None.
+        """
+        return self.deviceId
+
+
     def get_token(self):
         """
         Authenticates the device with the server and retrieves an authentication token.
@@ -120,7 +146,7 @@ class PlatanAuth:
             None: All exceptions are handled internally.
         """
         # Step 1: Join
-        resp = requests.post(self.baseUrl, json={
+        resp = requests.post(f"{self.baseUrl}/sensorUpload.php", json={
             "command": "join",
             "id": self.deviceId
         })
@@ -153,7 +179,7 @@ class PlatanAuth:
             self.token = None
             return None
 
-        resp = requests.post(self.baseUrl, json={
+        resp = requests.post(f"{self.baseUrl}/sensorUpload.php", json={
             "command": "challenge",
             "id": self.deviceId,
             "challenge": encrypted_hex,
@@ -173,41 +199,6 @@ class PlatanAuth:
             return None
         return self.token
 
-    def send_data(self, sensor_data):
-        """
-        Sends sensor data to the server using a POST request.
-
-        Args:
-            sensor_data (dict): The sensor data to be sent to the server.
-
-        Returns:
-            str or None: The UUID returned by the server if the request is successful, otherwise None.
-
-        Side Effects:
-            Prints error messages if the token is missing or if the request fails.
-            Resets the token to None if the request fails.
-
-        Notes:
-            Requires a valid authentication token. Call get_token() before using this method.
-        """
-        if not self.token:
-            print("No token, call get_token() first.")
-            return None
-        resp = requests.post(self.baseUrl, json={
-            "command": "data",
-            "id": self.deviceId,
-            "token": self.token,
-            "data": sensor_data
-        })
-        if resp.status_code != 200:
-            print("Data failed:", resp.text)
-            resp.close()
-            self.token = None
-            return None
-        data_result = resp.json()
-        resp.close()
-        return data_result.get('uuid', None)
-
 
     @staticmethod
     def pkcs7_pad(msg_bytes):
@@ -226,17 +217,71 @@ class PlatanAuth:
 
 if __name__ == "__main__":
     import sys
+    import os
+    import binascii
     device = PlatanAuth("platane")
+    id = device.get_id()
+    baseUrl = device.get_baseUrl()
+    print("Device ID:", id)
+    print("Base URL:", baseUrl)
+
     device.connect_wifi()
+
     token = device.get_token()
     print("Token received:", token)
     if not token:
         print("Failed to get token, exiting.")
         sys.exit(1) 
-    sample_data = {"temperature": 23.5, "humidity": 60}
-    uuid = device.send_data(sample_data)
+    sample_data = binascii.b2a_base64(bytearray(list(os.urandom(10000)))).decode('utf-8')
+    resp = requests.post(f"{baseUrl}/sensorUpload.php", json={
+        "command": "data",
+        "id": id,
+        "token": token,
+        "data": sample_data
+    })
+    if resp.status_code != 200:
+        print("Data failed:", resp.text)
+        resp.close()
+    data_result = resp.json()
+    resp.close()
+    uuid = data_result.get('uuid', None)
     if uuid is None:
         print("Failed to send data.")
+        sys.exit(1)
     else:
         print("Data sent, UUID:", uuid)
-    
+
+    # check files
+    resp = requests.post(f"{baseUrl}/sensorDownload.php", json={
+        "command": "check",
+        "id": id,
+        "token": token,
+        "name": uuid
+    })
+    if resp.status_code != 200:
+        print("Check failed:", resp.text)
+        resp.close()
+    data_result = resp.json()
+    resp.close()
+    chunks = data_result.get("chunks", 0)
+    print("Number of chunks available:", chunks)
+    for chunk in range(chunks):
+        resp = requests.post(f"{baseUrl}/sensorDownload.php", json={
+            "command": "down",
+            "id": id,
+            "token": token,
+            "chunk": chunk,
+            "name": uuid
+        })
+        if resp.status_code != 200:
+            print("Down failed:", resp.text)
+            resp.close()
+        data_result = resp.json()
+        resp.close()
+        size = data_result.get("length", 0)
+        data_b64 = data_result.get("data", "")
+        receiver = bytearray(4096)
+        decoded = binascii.a2b_base64(data_b64)
+        receiver[:len(decoded)] = decoded
+        data = receiver
+        print(f"Chunk {chunk} size: {size} bytes, data: {data[:50]}... (truncated)")    

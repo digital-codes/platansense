@@ -9,12 +9,28 @@ use Lcobucci\JWT\Token\Parser;
 use Lcobucci\JWT\Signer\Key\InMemory;
 require 'vendor/autoload.php';
 
+// $key   = InMemory::plainText(random_bytes(32));
+$config = parse_ini_file('/var/www/files/platane/config.ini', true);
+if (!$config || !isset($config['JWT']['key']) || !isset($config['JWT']['relatedTo']) || !isset($config['JWT']['issuedBy'])) {
+    http_response_code(500);
+    echo json_encode(["error" => "JWT config invalid"]);
+    exit;
+}
+$key = InMemory::plainText($config['JWT']['key']);
+$relatedTo = $config['JWT']['relatedTo'];
+$issuedBy = $config['JWT']['issuedBy'];
 
-$identifiedBy = 'sensor1';
-$relatedTo = 'component1';
-$issuedBy = 'http://example.com';
+$devicesFile = '/var/www/files/platane/devices.json';
+if (file_exists($devicesFile)) {
+    $json = file_get_contents($devicesFile);
+    $devices = json_decode($json, true);
+} else {
+    http_response_code(500);
+    echo json_encode(["error" => "Devices file not found"]);
+    exit;
+}
 
-$key   = InMemory::plainText(b"secretSensorkeyForJwTTestingAndO");
+$identifiedBy = '1';
 
 $token = createToken($key, $identifiedBy, $relatedTo, $issuedBy);
 echo 'Created Token: ', $token, PHP_EOL;
