@@ -30,6 +30,8 @@ i2s_port = 1
 sr = 8000
 CHUNK_SIZE = 4096
 
+LOOP = True
+
 # deinit
 machine.I2S(i2s_port, sck=bck, sd=sdo, ws=ws, mode=1, bits=16, format=0, rate=sr, ibuf=0).deinit()
 
@@ -49,13 +51,19 @@ spk.config(
 )
 M5.update()
 print("Speaker configured", spk)
-spk.setVolume(250)  # Set volume to 250
+spk.setVolume(255)  # Set volume to 255
 print("Speaker started + initialized, volume set to ", spk.getVolume())
-spk.playRaw(buf[:w], sr)
 
-while spk.isPlaying():
-    M5.update()
-    time.sleep_ms(10)  # allow other tasks to run   
+while True:
+    spk.playRaw(buf[:w], sr)
+
+    while spk.isPlaying():
+        M5.update()
+        time.sleep_ms(10)  # allow other tasks to run   
+    time.sleep(2)
+
+    if not LOOP:
+        break
 
 print("Playback finished.")
 time.sleep(1)
