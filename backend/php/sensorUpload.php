@@ -152,11 +152,21 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
     try {
         $audioData = base64_decode($input['data'], true);
         if ($audioData === false) {
-            throw new Exception("Invalid base64 audio data");
+            http_response_code(400);
+            echo json_encode(["status" => "data invalid"]);
+            exit;
+        }
+        // Check size limit 512 KB
+        if (strlen($audioData) > 512 * 1024) {
+            http_response_code(401);
+            echo json_encode(["status" => "not authorized7"]);
+            exit;
         }
         $audioFile = $audioDir . $uuid . ".adpcm";
         if (file_put_contents($audioFile, $audioData) === false) {
-            throw new Exception("Failed to write audio file");
+            http_response_code(500);
+            echo json_encode(["error" => "Failed to write audio file"]);
+            exit;
         }
     } catch (Exception $e) {
         http_response_code(500);
