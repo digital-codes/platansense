@@ -271,65 +271,52 @@ class EchoBase:
 
     # --- record / play overload emulation ---
 
-    def record(self, arg1, arg2, size=None):
+    def record(self, arg1, size = None):
         """
-        C++ overloads:
-
-            bool record(FS& fs, const char* filename, int size);
-            bool record(uint8_t* buffer, int size);
-
-        MicroPython emulation:
-
-            record(buffer, size)
-            record(fs_like, filename, size)
+        record(buffer, size)
+        record(filename, size)
 
         Where:
           - buffer is a bytearray/memoryview
-          - fs_like is unused; open() is used on filename.
+          - open() is used on filename.
         """
         if self.debug:
-            print("EchoBase.record:", arg1, arg2, size)
+            print("EchoBase.record:", arg1, size)
             
         # record(buffer, size)
         if isinstance(arg1, (bytearray, memoryview)):
             buffer = arg1
             if size is None:
-                size = arg2
+                raise ValueError("size required for record(buffer, size)")
             return self._record_to_buffer(buffer, size)
+        elif isinstance(arg1, str):
+            filename = arg1
+            if size is None:
+                raise ValueError("size required for record(filename, size)")
+            return self._record_to_file(filename, size)
+        else:
+            if self.debug:
+                print("EchoBase.record: invalid arguments")
+            return False
 
-        # record(fs_like, filename, size)
-        fs = arg1
-        filename = arg2
-        if size is None:
-            raise ValueError("size required for record(fs, filename, size)")
-
-        # fs is ignored; we use open() directly
-        return self._record_to_file(filename, size)
-
-    def play(self, arg1, arg2=None):
+    def play(self, arg1, size=None):
         """
-        C++ overloads:
-
-            bool play(FS& fs, const char* filename);
-            bool play(const uint8_t* buffer, int size);
-
-        MicroPython emulation:
-
             play(buffer, size)
-            play(fs_like, filename)
+            play(filename)
         """
         if self.debug:
-            print("EchoBase.play:", arg1, arg2)
+            print("EchoBase.play:", arg1, size)
             
         # play(buffer, size)
         if isinstance(arg1, (bytearray, memoryview, bytes)):
             buffer = arg1
-            size = arg2 if arg2 is not None else len(buffer)
+            if size is None:
+                raise ValueError("size required for play(buffer, size)")
             return self._play_from_buffer(buffer, size)
 
         elif isinstance(arg1, str):
             filename = arg1
-            # fs is ignored; we use open()
+            # size is ignored; we use open()
             return self._play_from_file(filename)
 
         else:
@@ -368,7 +355,7 @@ class EchoBase:
             sd_pin = self._i2s_di
             i2s_mode = I2S.RX
 
-        # create new I2S in standard I2S stereo 16-bit mode
+        # create new I2S in standard I2S mono 16-bit mode
         # ibuf is arbitrary buffer size; adjust for your platform.
         self.i2s = I2S(
             self.i2s_id,
@@ -377,9 +364,9 @@ class EchoBase:
             sd=Pin(sd_pin),
             mode=i2s_mode,
             bits=16,
-            format=I2S.STEREO,
+            format=I2S.MONO, 
             rate=self._sample_rate,
-            ibuf=4096,
+            ibuf=4*CHUNK_SIZE,
         )
 
         self._i2s_mode    = mode
