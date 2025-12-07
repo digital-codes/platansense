@@ -54,6 +54,41 @@ ES8311_DAC_REG37         = const(0x37)
 ES8311_GPIO_REG44        = const(0x44)
 ES8311_GP_REG45          = const(0x45)
 
+# microphone settings.
+# analog mic connected to mic1p/mic1n inputs in echobase
+# system register 14 settings:
+# 10.1 DIFFERENTIAL INPUT AND PGA
+# The input path of ES8311 includes one fully differential input and a PGA with 0dB to 30dB gain range. 
+# PDN_PGA controlled by Reg0x0E.
+# Bit[6] enable or disable this PGA. 
+# 1 – power down analog PGA circuit
+# 0 – power up analog PGA circuit
+# other settings in 0x0e:
+# default:0110 1010 = 0x6A
+# record operation: 
+# 0000 1010 = 0x0A  # power up PGA, disable ADC mute
+REG0E_DEFAULT = const(0x6A)
+REG0E_RECORD = const(0x0A)
+
+# DMIC: digital or analog mic select
+# Bit[6] selects digital or analog microphone input.
+# 0: analog mic
+# 1: digital mic
+
+# LINSESL controlled by Reg0x14.
+# Bit[5:4] selects this differential input. 
+# 01 for MIC1P/MIC1N
+
+# PGAGAIN # controlled by Reg0x14.
+# Bit[3:0] selects gain for PGA.
+
+# record settings:
+# 0x0001 GGGG   # start with 12db = 4. values 0..10 (0db..30db)
+# default: 0x14 = 0001 0100
+PGA_GAIN_DEFAULT = const(0x04)
+PGA_GAIN_MASK = const(0x0F)
+REG14_DEFAULT = const(0x10)
+
 
 
 # internal clock uses fs * 256 in your C driver
@@ -95,10 +130,10 @@ class ES8311:
     - ES8311 internal MCLK derived from SCLK/BCLK (no external MCLK pin).
     """
 
-    def __init__(self, i2c, addr=ES8311_I2C_ADDR, mclk_from_sclk=True):
+    def __init__(self, i2c, addr=ES8311_I2C_ADDR):
         self.i2c = i2c
         self.addr = addr
-        self._mclk_from_sclk = mclk_from_sclk
+        self._mclk_from_sclk = True
         self.debug = False
 
     # ---------- low-level I2C ----------
@@ -355,7 +390,38 @@ class ES8311:
         # clocking / sample rate
         self.set_sample_rate(sample_rate)
 
-    def start(self, adc=False, dac=True):
+
+    def setMicGain(self, gain=0):
+        """
+        Set recording gain (like es8311_set_record_gain()).
+        """
+        if gain < 0:
+            gain = 0
+        elif gain > 7:
+            gain = 7
+        return self.write_reg(ES8311_ADC_REG16, gain)
+
+    def setMicPGAGain(self, gain=0):
+        """
+        Set recording PGA gain (like es8311_set_record_gain()).
+        """
+        if gain < 0:
+            gain = 0
+        elif gain > 10:
+            gain = 10
+        return self.write_reg(ES8311_SYSTEM_REG14, REG14_DEFAULT | (gain & PGA_GAIN_MASK))
+
+    def setMicAdcVolume(self, volume=80):
+        """
+        Set recording volume (like es8311_set_record_volume()).
+        """
+        print("Using ALC instead")
+        return
+
+        # return self.write_reg(ES8311_ADC_REG17, reg17)
+        
+
+    def start(self, record=False):
         """
         Enable paths (like es8311_start()).
         """
@@ -367,13 +433,14 @@ class ES8311:
         adc_iface |= (1 << 6)
         dac_iface |= (1 << 6)
 
-        if adc:
+        if record:
             adc_iface &= ~(1 << 6)
-        if dac:
+        else:
             dac_iface &= ~(1 << 6)
 
         self.write_reg(ES8311_SDPIN_REG09, dac_iface)
         self.write_reg(ES8311_SDPOUT_REG0A, adc_iface)
+
 
         # power-up sequence
         self.write_reg(ES8311_ADC_REG17, 0xBF)
@@ -381,8 +448,22 @@ class ES8311:
         self.write_reg(ES8311_SYSTEM_REG12, 0x00)
         self.write_reg(ES8311_SYSTEM_REG14, 0x1A)
 
+        # set record mode params
+        if record:
+            self.write_reg(ES8311_SYSTEM_REG0E, REG0E_RECORD)
+            self.write_reg(ES8311_SYSTEM_REG14, REG14_DEFAULT | (PGA_GAIN_DEFAULT & PGA_GAIN_MASK))
+            # set recording to ALC mode
+            self.write_reg(ES8311_ADC_REG17, 0xff) # max volume
+            self.write_reg(ES8311_ADC_REG18, 0x80) # enable ALC
+            # from original settings
+            self.write_reg(ES8311_ADC_REG15, 0x40)
+        else:
+            self.write_reg(ES8311_SYSTEM_REG0E, REG0E_DEFAULT)
+            self.write_reg(ES8311_SYSTEM_REG14, REG14_DEFAULT)
+
+
+        # init regs
         self.write_reg(ES8311_SYSTEM_REG0D, 0x01)
-        self.write_reg(ES8311_ADC_REG15, 0x40)
         self.write_reg(ES8311_DAC_REG37, 0x08)
         self.write_reg(ES8311_GP_REG45, 0x00)
         self.write_reg(ES8311_GPIO_REG44, 0x58)
@@ -396,10 +477,14 @@ class ES8311:
         """
         self.write_reg(ES8311_DAC_REG32, 0x00)
         self.write_reg(ES8311_ADC_REG17, 0x00)
-        self.write_reg(ES8311_SYSTEM_REG0E, 0xFF)
+        # self.write_reg(ES8311_SYSTEM_REG0E, 0xFF)
         self.write_reg(ES8311_SYSTEM_REG12, 0x02)
-        self.write_reg(ES8311_SYSTEM_REG14, 0x00)
+        # self.write_reg(ES8311_SYSTEM_REG14, 0x00)
         self.write_reg(ES8311_SYSTEM_REG0D, 0xFA)
+        # new default values
+        self.write_reg(ES8311_SYSTEM_REG0E, REG0E_DEFAULT)
+        self.write_reg(ES8311_SYSTEM_REG14, REG14_DEFAULT)
+        # 
         self.mute(True)
         
 

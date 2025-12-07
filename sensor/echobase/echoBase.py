@@ -367,11 +367,7 @@ class M5EchoBase:
             if hasattr(es8311, "ES8311"):
                 # OO style driver
                 self.es_handle = es8311.ES8311(self.i2c, addr=ES8311_ADDR)
-                self.es_handle.init(sample_rate=sample_rate, bits=16, channels=2)
-                if hasattr(self.es_handle, "set_voice_volume"):
-                    self.es_handle.set_voice_volume(50)
-                if hasattr(self.es_handle, "configure_microphone"):
-                    self.es_handle.configure_microphone(digital_mic=False)
+                self.es_handle.init(sample_rate=sample_rate, bits=16)
             else:
                 # C-style binding emulation; adapt names to your driver
                 es8311.set_twowire(self.i2c)
