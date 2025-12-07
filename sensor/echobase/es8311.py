@@ -130,12 +130,12 @@ class ES8311:
     - ES8311 internal MCLK derived from SCLK/BCLK (no external MCLK pin).
     """
 
-    def __init__(self, i2c, addr=ES8311_I2C_ADDR):
+    def __init__(self, i2c, addr=ES8311_I2C_ADDR,debug=False):
         self.i2c = i2c
         self.addr = addr
         self._mclk_from_sclk = True
-        self.debug = False
-
+        self.debug = debug
+        self.op = None
     # ---------- low-level I2C ----------
 
     def write_reg(self, reg, val):
@@ -174,6 +174,9 @@ class ES8311:
             vol = 100
         reg = int(0xBF * vol / 100)
         self.write_reg(ES8311_DAC_REG32, reg)
+
+    def getOp(self):
+        return self.op
 
     # ---------- I2S interface ----------
 
@@ -435,8 +438,10 @@ class ES8311:
 
         if record:
             adc_iface &= ~(1 << 6)
+            self.op = "record"
         else:
             dac_iface &= ~(1 << 6)
+            self.op = "playback"
 
         self.write_reg(ES8311_SDPIN_REG09, dac_iface)
         self.write_reg(ES8311_SDPOUT_REG0A, adc_iface)
@@ -486,7 +491,7 @@ class ES8311:
         self.write_reg(ES8311_SYSTEM_REG14, REG14_DEFAULT)
         # 
         self.mute(True)
-        
+        self.op = None
 
 if __name__ == "__main__":
     from machine import I2C, Pin

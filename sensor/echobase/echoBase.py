@@ -1,6 +1,6 @@
-# m5echobase.py
+# echoBase.py
 #
-# MicroPython port of M5EchoBase (half-duplex I2S, shared RX/TX ID)
+# MicroPython port of EchoBase (half-duplex I2S, shared RX/TX ID)
 #
 # NOTE:
 # - This assumes a MicroPython build with machine.I2S support (ESP32).
@@ -30,9 +30,9 @@ try:
 except ImportError:
     es8311 = None  # You must provide this
 
-class M5EchoBase:
+class EchoBase:
     """
-    MicroPython equivalent of the C++ M5EchoBase.
+    MicroPython equivalent of the C++ EchoBase.
 
     Public API kept as close as possible:
 
@@ -59,7 +59,7 @@ class M5EchoBase:
     between TX and RX as needed.
     """
 
-    def __init__(self, i2s_id=0):
+    def __init__(self, i2s_id=0, debug=False):
         # codec handle / object from es8311 driver (implementation-dependent)
         self.es_handle = None
 
@@ -79,6 +79,7 @@ class M5EchoBase:
         # runtime state
         self._sample_rate = None
         self._i2s_mode    = None  # 'tx' or 'rx'
+        self.debug = debug
 
     # ---------- public API ----------
 
@@ -91,7 +92,8 @@ class M5EchoBase:
              i2s_do=5,
              i2s_bck=8,
              i2c=None,
-             i2c_id=0):
+             i2c_id=0
+             ):
         """
         Initialize I2C, ES8311, I/O expander, and prepare I2S.
 
@@ -99,6 +101,10 @@ class M5EchoBase:
         Otherwise a new I2C instance is created from `i2c_sda`/`i2c_scl`.
         """
 
+        if self.debug:
+            print("EchoBase.init:", sample_rate, i2c_sda, i2c_scl,
+                  i2s_di, i2s_ws, i2s_do, i2s_bck, i2c, i2c_id)
+            
         self._i2c_sda = i2c_sda
         self._i2c_scl = i2c_scl
         self._i2s_di  = i2s_di
@@ -129,24 +135,39 @@ class M5EchoBase:
         # In the original, mic gain is set after init()
         self.setMicGain(0)  # ES8311_MIC_GAIN_0DB equivalent; adapt as needed
 
+
+        # deinit i2s in exitsting state
+        if self.i2s is not None:
+            try:
+                self.i2s.deinit()
+            except Exception:
+                pass
+            self.i2s = None
+            
+
+        if self.debug:
+            print("EchoBase initialized")
+
         return True
 
     def setSpeakerVolume(self, volume):
         """
         volume: 0–100
         """
+        if self.debug:
+            print("EchoBase.setSpeakerVolume:", volume)
+            
         if volume < 0 or volume > 100:
             return False
 
-        if es8311 is None:
+        if self.es_handle is None:
             # Placeholder; adapt to your es8311 driver
             return False
 
         # Adapt this call to your MicroPython es8311 API:
         try:
             # For example, if your driver exposes this:
-            # es8311.voice_volume_set(self.es_handle, volume)
-            es8311.voice_volume_set(self.es_handle, volume)
+            self.es_handle.set_volume(volume)
         except AttributeError:
             # If your driver instead uses another method name, adjust here
             return False
@@ -157,26 +178,32 @@ class M5EchoBase:
         """
         gain: driver-specific mic gain value (e.g. ES8311_MIC_GAIN_0DB etc.)
         """
-        if es8311 is None:
+        if self.debug:
+            print("EchoBase.setMicGain:", gain)
+
+        if self.es_handle is None:
             return False
 
         try:
-            es8311.microphone_gain_set(self.es_handle, gain)
+            self.es_handle.setMicGain(gain)
         except AttributeError:
             return False
 
         return True
 
-    def setMicPGAGain(self, digital_mic, pga_gain):
+    def setMicPGAGain(self, pga_gain):
         """
         digital_mic: bool
         pga_gain: driver-specific integer gain value
         """
-        if es8311 is None:
+        if self.debug:
+            print("EchoBase.setMicPGAGain:",  pga_gain)
+            
+        if self.es_handle is None:
             return False
 
         try:
-            es8311.microphone_pgagain_config(self.es_handle, digital_mic, pga_gain)
+            self.es_handle.setMicPGAGain(pga_gain)
         except AttributeError:
             return False
 
@@ -186,13 +213,16 @@ class M5EchoBase:
         """
         volume: 0–100
         """
+        if self.debug:
+            print("EchoBase.setMicAdcVolume:", volume)
+            
         if volume > 100:
             return False
-        if es8311 is None:
+        if self.es_handle is None:
             return False
 
         try:
-            es8311.set_adc_volume(self.es_handle, volume)
+            self.es_handle.setMicAdcVolume(volume)
         except AttributeError:
             return False
 
@@ -203,6 +233,9 @@ class M5EchoBase:
         mute: True -> output off, False -> output on.
         Implements PI4IOE write like C++: IO_OUT = 0x00 when mute, 0xFF when not.
         """
+        if self.debug:
+            print("EchoBase.setMute:", mute)
+            
         value = 0x00 if mute else 0xFF
         self._wire_write_byte(PI4IOE_ADDR, PI4IOE_REG_IO_OUT, value)
         return True
@@ -214,6 +247,9 @@ class M5EchoBase:
 
         returns: number of bytes (stereo, 16-bit).
         """
+        if self.debug:
+            print("EchoBase.getBufferSize:", duration, sample_rate)
+            
         if sample_rate == 0:
             sample_rate = self._sample_rate or 16000
         # sample_rate * bytes_per_sample * channels
@@ -226,6 +262,9 @@ class M5EchoBase:
 
         returns: duration in seconds (float).
         """
+        if self.debug:
+            print("EchoBase.getDuration:", size, sample_rate)
+            
         if sample_rate == 0:
             sample_rate = self._sample_rate or 16000
         return float(size) / float(sample_rate * 2 * 2)
@@ -248,6 +287,9 @@ class M5EchoBase:
           - buffer is a bytearray/memoryview
           - fs_like is unused; open() is used on filename.
         """
+        if self.debug:
+            print("EchoBase.record:", arg1, arg2, size)
+            
         # record(buffer, size)
         if isinstance(arg1, (bytearray, memoryview)):
             buffer = arg1
@@ -276,34 +318,38 @@ class M5EchoBase:
             play(buffer, size)
             play(fs_like, filename)
         """
+        if self.debug:
+            print("EchoBase.play:", arg1, arg2)
+            
         # play(buffer, size)
         if isinstance(arg1, (bytearray, memoryview, bytes)):
             buffer = arg1
             size = arg2 if arg2 is not None else len(buffer)
             return self._play_from_buffer(buffer, size)
 
-        # play(fs_like, filename)
-        fs = arg1
-        filename = arg2
-        if filename is None:
-            raise ValueError("filename required for play(fs, filename)")
+        elif isinstance(arg1, str):
+            filename = arg1
+            # fs is ignored; we use open()
+            return self._play_from_file(filename)
 
-        # fs is ignored; we use open()
-        return self._play_from_file(filename)
+        else:
+            if self.debug:
+                print("EchoBase.play: invalid arguments")
+            return False
 
     # ---------- internal helpers ----------
 
-    def _ensure_i2s(self, mode, sample_rate=None):
+    def _ensure_i2s(self, mode):
         """
         Ensure a single I2S instance is configured for the given mode ('tx' or 'rx')
-        and sample rate. Reinitializes the I2S peripheral if needed.
+        Reinitializes the I2S peripheral if needed.
 
         Half-duplex: only one of TX or RX is active at a time, using the same ID.
         """
-        if sample_rate is None:
-            sample_rate = self._sample_rate or 16000
+        if self.debug:
+            print("_ensure_i2s:", mode)
 
-        if mode == self._i2s_mode and self.i2s is not None and sample_rate == self._sample_rate:
+        if mode == self._i2s_mode and self.i2s is not None:
             return
 
         # deinit previous instance, if any
@@ -332,12 +378,11 @@ class M5EchoBase:
             mode=i2s_mode,
             bits=16,
             format=I2S.STEREO,
-            rate=sample_rate,
+            rate=self._sample_rate,
             ibuf=4096,
         )
 
         self._i2s_mode    = mode
-        self._sample_rate = sample_rate
 
     def _es8311_codec_init(self, sample_rate):
         """
@@ -351,8 +396,14 @@ class M5EchoBase:
             es8311_voice_volume_set(es_handle, 50);
             es8311_microphone_config(es_handle, false);
         """
+
+        if self.debug:
+            print("_es8311_codec_init:", sample_rate)
+
         if es8311 is None:
             # No codec driver available
+            if self.debug:
+                print("es8311 driver module not available") 
             return False
 
         try:
@@ -364,19 +415,19 @@ class M5EchoBase:
             #
             # Replace this with your actual driver calls.
 
-            if hasattr(es8311, "ES8311"):
-                # OO style driver
-                self.es_handle = es8311.ES8311(self.i2c, addr=ES8311_ADDR)
-                self.es_handle.init(sample_rate=sample_rate, bits=16)
-            else:
-                # C-style binding emulation; adapt names to your driver
-                es8311.set_twowire(self.i2c)
-                self.es_handle = es8311.create(0, ES8311_ADDR)
-                es8311.init(self.es_handle, sample_rate, 16, 16)
-                es8311.voice_volume_set(self.es_handle, 50)
-                es8311.microphone_config(self.es_handle, False)
+            if self.debug:
+                print("Using OO-style es8311 driver")
+            self.es_handle = es8311.ES8311(self.i2c, addr=ES8311_ADDR, debug=self.debug)
+            
+            self.es_handle.reset()
+            self.es_handle.init_default(bits=16, fmt="i2s", slave=True)
+            self.es_handle.start(record=False) # playback
+            self.es_handle.set_volume(80)
+            self.es_handle.mute(False)
 
         except Exception:
+            if self.debug:
+                print("es8311 codec initialization failed")
             return False
 
         return True
@@ -391,6 +442,9 @@ class M5EchoBase:
           - DIR    = 0x6F (inputs 0, outputs 1, P0 as output)
           - OUT    = 0xFF
         """
+        if self.debug:
+            print("_pi4ioe_init")
+            
         # Read CTRL register to get current state
         self._wire_read_byte(PI4IOE_ADDR, PI4IOE_REG_CTRL)
 
@@ -413,6 +467,10 @@ class M5EchoBase:
         """
         I2C single-byte register read (replacement for wire_read_byte()).
         """
+        
+        if self.debug:
+            print(f"_wire_read_byte: addr=0x{i2c_addr:02X}, reg=0x{reg_addr:02X}")
+
         try:
             data = self.i2c.readfrom_mem(i2c_addr, reg_addr, 1)
             return data[0]
@@ -423,6 +481,9 @@ class M5EchoBase:
         """
         I2C single-byte register write (replacement for wire_write_byte()).
         """
+        if self.debug:
+            print(f"_wire_write_byte: addr=0x{i2c_addr:02X}, reg=0x{reg_addr:02X}, value=0x{value:02X}")
+            
         try:
             self.i2c.writeto_mem(i2c_addr, reg_addr, bytes([value]))
         except Exception:
@@ -434,6 +495,15 @@ class M5EchoBase:
         """
         Record `size` bytes into `buffer` via I2S RX.
         """
+        if self.debug:
+            print("_record_to_buffer:", size)
+
+        # check if recording mode already selected
+        if self.es_handle.getOp() != "record":
+            self.es_handle.stop() 
+            print("Reinit i2s for recording")
+            self.es_handle.start(record=True)  # start recording
+            
         self._ensure_i2s('rx')
         mv = memoryview(buffer)[:size]
 
@@ -451,6 +521,15 @@ class M5EchoBase:
         """
         Record `size` bytes from I2S RX into a file.
         """
+        if self.debug:
+            print("_record_to_file:", filename, size)
+            
+        # check if recording mode already selected
+        if self.es_handle.getOp() != "record":
+            self.es_handle.stop() 
+            print("Reinit i2s for recording")
+            self.es_handle.start(record=True)  # start recording
+
         self._ensure_i2s('rx')
 
         remaining  = size
@@ -480,6 +559,15 @@ class M5EchoBase:
         """
         Play `size` bytes from `buffer` via I2S TX.
         """
+        if self.debug:
+            print("_play_from_buffer:", size)
+            
+        # check if playback mode already selected
+        if self.es_handle.getOp() != "playback":
+            self.es_handle.stop() 
+            print("Reinit i2s for playback")
+            self.es_handle.start(record=False)  # start playback
+
         self._ensure_i2s('tx')
         mv = memoryview(buffer)[:size]
 
@@ -497,6 +585,15 @@ class M5EchoBase:
         """
         Play an entire file via I2S TX.
         """
+        if self.debug:
+            print("_play_from_file:", filename)
+
+        # check if playback mode already selected
+        if self.es_handle.getOp() != "playback":
+            self.es_handle.stop() 
+            print("Reinit i2s for playback")
+            self.es_handle.start(record=False)  # start playback
+            
         self._ensure_i2s('tx')
         buf        = bytearray(CHUNK_SIZE)
 
