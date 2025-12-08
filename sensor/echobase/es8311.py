@@ -166,7 +166,7 @@ class ES8311:
             regv |= 0x60  # set bits 5 & 6
         self.write_reg(ES8311_DAC_REG31, regv)
 
-    def set_volume(self, vol):
+    def setSpkVolume(self, vol):
         """Volume 0..100%, mapped to [0x00..0xBF]."""
         if vol < 0:
             vol = 0
@@ -473,7 +473,7 @@ class ES8311:
         self.write_reg(ES8311_GP_REG45, 0x00)
         self.write_reg(ES8311_GPIO_REG44, 0x58)
 
-        self.set_volume(80)
+        self.setSpkVolume(80)
         self.mute(False)
 
     def stop(self):
@@ -507,7 +507,7 @@ if __name__ == "__main__":
     codec.init_default(bits=16, fmt="i2s", slave=True)
     codec.start(adc=False, dac=True)   # playback only
 
-    codec.set_volume(60)
+    codec.setSpkVolume(60)
     codec.mute(False)
 
     # ... now drive I2S peripheral of the MCU for audio playback

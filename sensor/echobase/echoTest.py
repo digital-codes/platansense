@@ -1,5 +1,5 @@
 import echoBase
-eb = echoBase.EchoBase(debug=True)
+eb = echoBase.EchoBase()#debug=True)
 eb.init(sample_rate=8000)
 eb.setSpeakerVolume(90)
 eb.play("/media/test8000.wav")
@@ -7,6 +7,8 @@ eb.play("/media/test8000.wav")
 
 # mic gain 0..7
 # mix pga gain 0..10
+
+eb.setShift(2)
 
 reclen = 100000  # 100k ~ 6 seconds at 8kHz,16bit   
 recbuf = bytearray(reclen)

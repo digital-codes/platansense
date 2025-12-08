@@ -9,6 +9,7 @@
 #   the es8311_* calls to match your actual driver API.
 
 from machine import Pin, I2C, I2S
+import time
 
 # ---- PI4IOE5V6408 I/O expander constants ----
 PI4IOE_ADDR          = 0x43
@@ -39,7 +40,7 @@ class EchoBase:
         bool init(sample_rate=16000, i2c_sda=38, i2c_scl=39,
                   i2s_di=7, i2s_ws=6, i2s_do=5, i2s_bck=8, i2c=None)
 
-        bool setSpeakerVolume(volume)
+        bool setSpkVolume(volume)
         bool setMicGain(gain)
         bool setMicPGAGain(digital_mic, pga_gain)
         bool setMicAdcVolume(volume)
@@ -79,7 +80,13 @@ class EchoBase:
         # runtime state
         self._sample_rate = None
         self._i2s_mode    = None  # 'tx' or 'rx'
+        self._shift      = 0     # I2S shift for some platforms
         self.debug = debug
+        self._pga_gain = 7
+        self._mic_gain = 10
+        self._mic_adc_volume = 100
+        self._spk_volume = 90
+        
 
     # ---------- public API ----------
 
@@ -150,6 +157,15 @@ class EchoBase:
 
         return True
 
+    def setShift(self, shift):
+        """
+        Set I2S shift value for playback (if needed on your platform).
+        """
+        if self.debug:
+            print("EchoBase.setShift:", shift)
+        self._shift = shift
+        
+
     def setSpeakerVolume(self, volume):
         """
         volume: 0–100
@@ -164,10 +180,12 @@ class EchoBase:
             # Placeholder; adapt to your es8311 driver
             return False
 
+        self._spk_volume = volume
+        
         # Adapt this call to your MicroPython es8311 API:
         try:
             # For example, if your driver exposes this:
-            self.es_handle.set_volume(volume)
+            self.es_handle.setSpkVolume(volume)
         except AttributeError:
             # If your driver instead uses another method name, adjust here
             return False
@@ -183,7 +201,9 @@ class EchoBase:
 
         if self.es_handle is None:
             return False
-
+        
+        self._mic_gain = gain
+        
         try:
             self.es_handle.setMicGain(gain)
         except AttributeError:
@@ -202,6 +222,8 @@ class EchoBase:
         if self.es_handle is None:
             return False
 
+        self._pga_gain = pga_gain
+        
         try:
             self.es_handle.setMicPGAGain(pga_gain)
         except AttributeError:
@@ -221,6 +243,8 @@ class EchoBase:
         if self.es_handle is None:
             return False
 
+        self._mic_adc_volume = volume
+        
         try:
             self.es_handle.setMicAdcVolume(volume)
         except AttributeError:
@@ -341,6 +365,8 @@ class EchoBase:
             print("_ensure_i2s:", mode)
 
         if mode == self._i2s_mode and self.i2s is not None:
+            if self.debug:
+                print("_ensure_i2s, already set")
             return
 
         # deinit previous instance, if any
@@ -350,6 +376,7 @@ class EchoBase:
             except Exception:
                 pass
             self.i2s = None
+        time.sleep(0.1)  # brief delay to allow hardware to settle
 
         # choose SD pin by direction
         if mode == 'tx':
@@ -372,6 +399,8 @@ class EchoBase:
             rate=self._sample_rate,
             ibuf=4*CHUNK_SIZE,
         )
+
+        time.sleep(0.1)  # brief delay to allow hardware to settle
 
         self._i2s_mode    = mode
 
@@ -406,10 +435,7 @@ class EchoBase:
             #
             # Replace this with your actual driver calls.
 
-            if self.debug:
-                print("Using OO-style es8311 driver")
             self.es_handle = es8311.ES8311(self.i2c, addr=ES8311_ADDR, debug=self.debug)
-            
             self.es_handle.reset()
             self.es_handle.init_default(bits=16, fmt="i2s", slave=True)
             self.es_handle.start(record=False) # playback
@@ -494,6 +520,10 @@ class EchoBase:
             self.es_handle.stop() 
             print("Reinit i2s for recording")
             self.es_handle.start(record=True)  # start recording
+            # restore volume/gain settings
+            self.es_handle.setMicGain(self._mic_gain)
+            self.es_handle.setMicPGAGain(self._pga_gain)
+            self.es_handle.setMicAdcVolume(self._mic_adc_volume)
             
         self._ensure_i2s('rx')
         mv = memoryview(buffer)[:size]
@@ -520,6 +550,10 @@ class EchoBase:
             self.es_handle.stop() 
             print("Reinit i2s for recording")
             self.es_handle.start(record=True)  # start recording
+            # restore volume/gain settings
+            self.es_handle.setMicGain(self._mic_gain)
+            self.es_handle.setMicPGAGain(self._pga_gain)
+            self.es_handle.setMicAdcVolume(self._mic_adc_volume)
 
         self._ensure_i2s('rx')
 
@@ -558,11 +592,15 @@ class EchoBase:
             self.es_handle.stop() 
             print("Reinit i2s for playback")
             self.es_handle.start(record=False)  # start playback
+            # restore volume/gain settings
+            self.es_handle.setSpkVolume(self._spk_volume)
 
         self._ensure_i2s('tx')
         mv = memoryview(buffer)[:size]
 
         try:
+            if self._shift > 0:
+                self.i2s.shift(buf=mv,bits=16,shift=self._shift)
             n = self.i2s.write(mv)
             if isinstance(n, tuple):
                 n = n[0]
@@ -584,6 +622,8 @@ class EchoBase:
             self.es_handle.stop() 
             print("Reinit i2s for playback")
             self.es_handle.start(record=False)  # start playback
+            # restore volume/gain settings
+            self.es_handle.setSpkVolume(self._spk_volume)
             
         self._ensure_i2s('tx')
         buf        = bytearray(CHUNK_SIZE)
