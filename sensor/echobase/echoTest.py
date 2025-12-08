@@ -1,14 +1,28 @@
 import echoBase
+import adpcm
+import time 
+
+
 eb = echoBase.EchoBase()#debug=True)
 eb.init(sample_rate=8000)
 eb.setSpeakerVolume(90)
 eb.play("/media/test8000.wav")
 #eb.record("/media/mist.bin",100000)
 
+with open("/media/test_8000.adpcm", "rb") as f:
+    raw = f.read()
+print("Read ADPCM data, size:", len(raw))
+buf = bytearray(4*len(raw)) # max size after decode
+w = adpcm.decode_into(raw, buf)
+print("Decoded ADPCM data into buffer, size:", w)
+eb.play(buf,w)
+print("Played ADPCM decoded data")
+time.sleep(2)
+
 # mic gain 0..7
 # mix pga gain 0..10
 
-eb.setShift(2)
+eb.setShift(0)
 
 reclen = 100000  # 100k ~ 6 seconds at 8kHz,16bit   
 recbuf = bytearray(reclen)
