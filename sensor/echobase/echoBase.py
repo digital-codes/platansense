@@ -31,6 +31,22 @@ try:
 except ImportError:
     es8311 = None  # You must provide this
 
+# IRQ stuff
+playlen, playpos, playbuf, isplaying = 0,0,None,False
+def playHandler(port):
+    global playlen, playpos, playbuf, isplaying, playport
+    # port is I2S instance
+    playlen -= CHUNK_SIZE
+    if playlen <= 0:
+        isplaying = False
+        port.irq(None)
+    else:
+        chunk = CHUNK_SIZE if playlen >= CHUNK_SIZE else playlen
+        mv = memoryview(playbuf)[playpos:playpos+chunk]
+        port.write(mv)
+        playpos += chunk
+
+
 class EchoBase:
     """
     MicroPython equivalent of the C++ EchoBase.
@@ -86,6 +102,11 @@ class EchoBase:
         self._mic_gain = 10
         self._mic_adc_volume = 100
         self._spk_volume = 90
+        self._i2s_irq = None
+        self._is2_isplaying = False
+        self._i2s_playlen = 0
+        self._i2s_playpos = 0
+        self._i2s_playbuf = None
         
 
     # ---------- public API ----------
@@ -150,12 +171,20 @@ class EchoBase:
             except Exception:
                 pass
             self.i2s = None
+            self._i2s_irq = None
             
 
         if self.debug:
             print("EchoBase initialized")
 
         return True
+
+    def getChunkSize(self):
+        """
+        Get chunk size used internally.
+        """
+        return CHUNK_SIZE
+    
 
     def setShift(self, shift):
         """
@@ -165,7 +194,6 @@ class EchoBase:
             print("EchoBase.setShift:", shift)
         self._shift = shift
         
-
     def setSpeakerVolume(self, volume):
         """
         volume: 0–100
@@ -325,7 +353,7 @@ class EchoBase:
                 print("EchoBase.record: invalid arguments")
             return False
 
-    def play(self, arg1, size=None):
+    def play(self, arg1, size=None, useIrq=False):
         """
             play(buffer, size)
             play(filename)
@@ -338,6 +366,10 @@ class EchoBase:
             buffer = arg1
             if size is None:
                 raise ValueError("size required for play(buffer, size)")
+            if useIrq:
+                self._i2s_irq = playHandler
+            else:
+                self._i2s_irq = None
             return self._play_from_buffer(buffer, size)
 
         elif isinstance(arg1, str):
@@ -351,6 +383,19 @@ class EchoBase:
             if self.debug:
                 print("EchoBase.play: invalid arguments")
             return False
+
+    def getPlayStatus(self):
+        global isplaying
+        """
+        Check if I2S is currently playing.
+
+        returns: True if playing, False otherwise.
+        """
+        if self.i2s is None:
+            return False
+        return isplaying
+    
+
 
     # ---------- internal helpers ----------
 
@@ -528,6 +573,11 @@ class EchoBase:
         self._ensure_i2s('rx')
         mv = memoryview(buffer)[:size]
 
+        if self._i2s_irq:
+            self.i2s.irq(self._i2s_irq)
+        else:
+            self.i2s.irq(None)  
+
         try:
             # readinto() usually returns number of bytes
             n = self.i2s.readinto(mv)
@@ -560,6 +610,11 @@ class EchoBase:
         remaining  = size
         buf        = bytearray(CHUNK_SIZE)
 
+        if self._i2s_irq:
+            self.i2s.irq(self._i2s_irq)
+        else:
+            self.i2s.irq(None)  
+
         try:
             with open(filename, "wb") as f:
                 while remaining > 0:
@@ -581,6 +636,7 @@ class EchoBase:
         return True
 
     def _play_from_buffer(self, buffer, size):
+        global playlen, playpos, playbuf, isplaying, playport
         """
         Play `size` bytes from `buffer` via I2S TX.
         """
@@ -598,17 +654,38 @@ class EchoBase:
         self._ensure_i2s('tx')
         mv = memoryview(buffer)[:size]
 
-        try:
-            if self._shift > 0:
-                self.i2s.shift(buf=mv,bits=16,shift=self._shift)
-            n = self.i2s.write(mv)
-            if isinstance(n, tuple):
-                n = n[0]
-        except Exception:
-            return False
+        if self._shift > 0:
+            self.i2s.shift(buf=mv,bits=16,shift=self._shift)
 
-        # Some ports require flushing or a small delay; add if needed.
-        return n == size
+        if self._i2s_irq:
+            if self.debug:
+                print("play with irq")
+            playbuf = mv
+            playsize = CHUNK_SIZE if size > CHUNK_SIZE else size            
+            playlen = size - CHUNK_SIZE if size > CHUNK_SIZE else 0
+            playpos = playsize
+            playport = self.i2s
+            isplaying = True
+            if self.debug:
+                print(f"play size: {size}, playsize: {playsize}, remaining: {playlen}")
+                print("I2S:", self.i2s)
+            self.i2s.irq(playHandler)
+            try:
+                self.i2s.write(mv[:playsize])
+            except Exception:
+                return False
+            return True
+
+        else:
+            self.i2s.irq(None)  
+            try:
+                n = self.i2s.write(mv)
+                if isinstance(n, tuple):
+                    n = n[0]
+            except Exception:
+                return False
+            # Some ports require flushing or a small delay; add if needed.
+            return n == size
 
     def _play_from_file(self, filename):
         """
@@ -624,10 +701,11 @@ class EchoBase:
             self.es_handle.start(record=False)  # start playback
             # restore volume/gain settings
             self.es_handle.setSpkVolume(self._spk_volume)
-            
-        self._ensure_i2s('tx')
-        buf        = bytearray(CHUNK_SIZE)
 
+        # don't play file with irq
+        self._ensure_i2s('tx')
+        self.i2s.irq(None)  
+        buf        = bytearray(CHUNK_SIZE)
         try:
             with open(filename, "rb") as f:
                 f.read(44)  # Skip WAV header
@@ -635,7 +713,6 @@ class EchoBase:
                     n_read = f.readinto(buf)
                     if n_read is None or n_read == 0:
                         break
-
                     mv = memoryview(buf)[:n_read]
                     n_written = self.i2s.write(mv)
                     if isinstance(n_written, tuple):
@@ -646,4 +723,3 @@ class EchoBase:
             return False
 
         return True
-

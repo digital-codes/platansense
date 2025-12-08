@@ -9,6 +9,7 @@ eb.setSpeakerVolume(90)
 eb.play("/media/test8000.wav")
 #eb.record("/media/mist.bin",100000)
 
+
 with open("/media/test_8000.adpcm", "rb") as f:
     raw = f.read()
 print("Read ADPCM data, size:", len(raw))
@@ -17,7 +18,15 @@ w = adpcm.decode_into(raw, buf)
 print("Decoded ADPCM data into buffer, size:", w)
 eb.play(buf,w)
 print("Played ADPCM decoded data")
-time.sleep(2)
+time.sleep(1)
+
+# same with irq 
+eb.play(buf,w,useIrq=True)
+while eb.getPlayStatus():
+    print(".", end="")
+    time.sleep_ms(50)
+time.sleep(1)
+
 
 # mic gain 0..7
 # mix pga gain 0..10
