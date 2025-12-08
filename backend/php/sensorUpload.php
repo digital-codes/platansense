@@ -112,6 +112,7 @@ if ($command === "challenge" && isset($input['id'], $input['session'], $input['c
         OPENSSL_RAW_DATA,
         $ivBin
     );
+    $expected = substr($expected, 0, 16);
 
     if (hash_equals(bin2hex($expected), $input['challenge'])) {
         $now = new DateTimeImmutable();

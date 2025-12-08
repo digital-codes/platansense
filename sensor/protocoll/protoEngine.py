@@ -109,7 +109,9 @@ class ProtoEngine:
             print("Challenge payload:", payload)
         r2 = requests.post(self.base_url + "/sensorUpload.php", json=payload)
         if r2.status_code != 200:
-            raise ValueError(f"Join request failed with status code {r2.status_code}, {r2.text}")
+            if r2.status_code == 401:
+                print(json.dumps(r2))
+            raise ValueError(f"Join request failed with status code {r2.status_code}, {r2.text}.")
         data = r2.json()
         if self.debug:
             print("Challenge response:", data)
@@ -154,5 +156,9 @@ if __name__ == "__main__":
     pt.setDebug(True)
     pt.connect()    
     pt.join()
-    
+    if pt.state == "connected":
+        print("Join OK")
+    else:
+        print("Join failed")
+        
     
