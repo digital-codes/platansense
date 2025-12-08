@@ -280,16 +280,18 @@ class EchoBase:
           - buffer is a bytearray/memoryview
           - open() is used on filename.
         """
-        if self.debug:
-            print("EchoBase.record:", arg1, size)
-            
+           
         # record(buffer, size)
         if isinstance(arg1, (bytearray, memoryview)):
+            if self.debug:
+                print("EchoBase.record buffer:", size)
             buffer = arg1
             if size is None:
                 raise ValueError("size required for record(buffer, size)")
             return self._record_to_buffer(buffer, size)
         elif isinstance(arg1, str):
+            if self.debug:
+                print("EchoBase.record file:", arg1, size)
             filename = arg1
             if size is None:
                 raise ValueError("size required for record(filename, size)")
@@ -304,17 +306,19 @@ class EchoBase:
             play(buffer, size)
             play(filename)
         """
-        if self.debug:
-            print("EchoBase.play:", arg1, size)
             
         # play(buffer, size)
         if isinstance(arg1, (bytearray, memoryview, bytes)):
+            if self.debug:
+                print("EchoBase.play buffer:", size)
             buffer = arg1
             if size is None:
                 raise ValueError("size required for play(buffer, size)")
             return self._play_from_buffer(buffer, size)
 
         elif isinstance(arg1, str):
+            if self.debug:
+                print("EchoBase.play file:", arg1, size)
             filename = arg1
             # size is ignored; we use open()
             return self._play_from_file(filename)
