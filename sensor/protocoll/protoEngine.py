@@ -205,15 +205,17 @@ if __name__ == "__main__":
         chunkSize = resp.get("chunksize", 0)
         print(f"Chunks: {chunks}, Chunk Size: {chunkSize}")
         
-        for c in range(chunks):
-            print(f"Downloading chunk {c+1}/{chunks}...")
-            resp = pt.download(name, c)
-            print("Downloaded chunk data:", resp)
-            dt = binascii.a2b_base64(resp.get("data", ""))
-            print("Decoded chunk data:", dt.decode('utf-8'))
-            # Implement download logic here
-            # resp = pt.download(name, c)
-            # print("Downloaded chunk data:", resp)
+        while pt.state == "connected":
+            time.sleep(10)
+            for c in range(chunks):
+                print(f"Downloading chunk {c+1}/{chunks}...")
+                resp = pt.download(name, c)
+                print("Downloaded chunk data:", resp)
+                dt = binascii.a2b_base64(resp.get("data", ""))
+                print("Decoded chunk data:", dt.decode('utf-8'))
+                # Implement download logic here
+                # resp = pt.download(name, c)
+                # print("Downloaded chunk data:", resp)
         
     pt.disconnect()
     if pt.state != "offline":
