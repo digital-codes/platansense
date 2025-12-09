@@ -68,7 +68,8 @@ if ($command === "check" && isset($input['name']) && isset($input['id']) && isse
     $numChunks = (int)ceil($fileSize / $chunkSize);
 
     echo json_encode([
-        "chunks" => $numChunks
+        "chunks" => $numChunks,
+        "chunksize" => $chunkSize
     ]);
 
     exit;

@@ -2,7 +2,13 @@ import cryptolib
 import requests 
 import json
 import time
-import network
+import sys
+import binascii
+if not sys.platform.lower().startswith("linux"):
+    import network
+    embedded = True
+else:
+    embedded = False
 
 
 class ProtoEngine:
@@ -31,14 +37,6 @@ class ProtoEngine:
         # Define valid transitions
         self.state = to_state
 
-    def _encrypt(self, data):
-        if not isinstance(data, (bytes, bytearray)):
-            data = str(data).encode()
-        return self._aes.encrypt(data)
-
-    def _decrypt(self, data):
-        return self._aes.decrypt(data)
-
     def setDebug(self, enable):
         self.debug = enable
         
@@ -46,29 +44,35 @@ class ProtoEngine:
     def connect(self):
         if self.state != "offline":
             return
-        nic = network.WLAN(network.WLAN.IF_STA)
-        if not nic.active():
-            nic.active(True)
-        while not nic.active():
+        if embedded:
+            nic = network.WLAN(network.WLAN.IF_STA)
+            if not nic.active():
+                nic.active(True)
+            while not nic.active():
+                if self.debug:
+                    print("Waiting for network interface to become active...")
+                time.sleep(1)
+            nic.connect(self.ssid, self.pwd)
+            while not nic.isconnected():
+                if self.debug:
+                    print("Waiting for network connection...")
+                time.sleep(1)
+                
             if self.debug:
-                print("Waiting for network interface to become active...")
-            time.sleep(1)
-        nic.connect(self.ssid, self.pwd)
-        while not nic.isconnected():
-            if self.debug:
-                print("Waiting for network connection...")
-            time.sleep(1)
-            
+                print("Network config:", nic.ifconfig()) 
+
+                
         if self.debug:
-            print("Network connected:", nic.ifconfig()) 
+            print("Network connected") 
 
         self._transit(self.state, "online")
 
     def disconnect(self):
         if self.state == "offline":
             return
-        nic = network.WLAN(network.WLAN.IF_STA)
-        nic.disconnect()
+        if embedded:
+            nic = network.WLAN(network.WLAN.IF_STA)
+            nic.disconnect()
         self.session = None
         self.token = None   
         self._transit(self.state, "offline")
@@ -119,23 +123,38 @@ class ProtoEngine:
         return True
     
 
-    def upload(self, endpoint, data, headers=None, as_hex=False):
-        """
-        Encrypts `data` and POSTs it to host/endpoint.
-        If as_hex is True, sends encrypted payload as hex string; otherwise sends raw bytes.
-        Returns the requests.Response object (raises on HTTP errors).
-        """
-        payload = self.encrypt(data)
-        body = payload.hex().encode() if as_hex else payload
-        url = self.base_url.rstrip('/') + '/' + endpoint.lstrip('/')
-        resp = requests.post(url, data=body, headers=headers or {})
-        resp.raise_for_status()
-        return resp
+    def upload(self, data):
+        if self.state != "connected":
+            raise ValueError("Not connected. Cannot upload data.")
+        payload = {"command": "data", "token": self.token, "session": self.session, "id": self.id, "data": binascii.b2a_base64(data).decode('utf-8')}
+        resp = requests.post(self.base_url + "/sensorUpload.php", json=payload)
+        if resp.status_code != 200:
+            self._transit(self.state, "online")
+            if self.debug:
+                print("Upload response:", resp.status_code, resp.text)
+            raise ValueError(f"Upload request failed with status code {resp.status_code}, {resp.text}.")
+        result = resp.json()
+        if self.debug:
+            print("Upload response:", result)
+        return result
 
-    def upload_json(self, endpoint, obj, headers=None, as_hex=False):
-        headers = dict(headers or {})
-        headers.setdefault("Content-Type", "application/json")
-        return self.upload(endpoint, json.dumps(obj).encode(), headers=headers, as_hex=as_hex)
+    def check(self,name):
+        if self.state != "connected":
+            raise ValueError("Not connected. Cannot upload data.")
+        payload = {"command": "check", "token": self.token, "session": self.session, "id": self.id, "name": name}
+        resp = requests.post(self.base_url + "/sensorDownload.php", json=payload)
+        if resp.status_code != 200:
+            self._transit(self.state, "online")
+            if self.debug:
+                print("Upload response:", resp.status_code, resp.text)
+            raise ValueError(f"Upload request failed with status code {resp.status_code}, {resp.text}.")
+        result = resp.json()
+        if self.debug:
+            print("Upload response:", result)
+        return result
+    
+    def download(self,name,chunk):
+        pass
 
 #a = cryptolib.aes("1234567812345678",2,b"1234123412341234")
 #x = a.encrypt(b"1234123412341234")
@@ -143,8 +162,10 @@ class ProtoEngine:
 #'9ae8fd02b340288a0e7bbff0f0ba54d6'
 
 if __name__ == "__main__":
-    baseUrl = "http://localhost:9000"
-    baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
+    if not embedded:
+        baseUrl = "http://localhost:9000"
+    else:
+        baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
     id = 1
     key = "00112233445566778899aabbccddeeff"
 
@@ -157,5 +178,26 @@ if __name__ == "__main__":
         print("Join OK")
     else:
         print("Join failed")
+
+    dummyData = b'This is a test payload for encryption.'
+    resp = pt.upload(dummyData)
+    
+    name = resp.get("uuid", None)
+    if not name:
+        print("Upload failed")
+    else:
+        print("Upload OK, name:", name)
+        resp = pt.check(name)
+        print("Check OK, size:", resp.get("size",0))
+        chunks = resp.get("chunks", 0)
+        chunkSize = resp.get("chunksize", 0)
+        print(f"Chunks: {chunks}, Chunk Size: {chunkSize}")
         
+        
+    pt.disconnect()
+    if pt.state != "offline":
+        print("Disconnect failed")
+    else:
+        print("Disconnect OK")
+            
     
