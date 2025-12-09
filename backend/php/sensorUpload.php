@@ -106,13 +106,13 @@ if ($command === "challenge" && isset($input['id'], $input['session'], $input['c
 
     $expected = openssl_encrypt(
         hex2bin($stored['challenge']),
-        //"AES-256-CBC",  // was 128
-        "AES-128-CBC",  // was 128
+        "AES-128-CBC", 
         $keyBin,
-        OPENSSL_RAW_DATA,
+        OPENSSL_RAW_DATA | OPENSSL_ZERO_PADDING,  // micropython has no padding
         $ivBin
     );
-    $expected = substr($expected, 0, 16);
+    // micropython has no padding => cut if present
+    //$expected = substr($expected, 0, 16);
 
     if (hash_equals(bin2hex($expected), $input['challenge'])) {
         $now = new DateTimeImmutable();
@@ -120,7 +120,7 @@ if ($command === "challenge" && isset($input['id'], $input['session'], $input['c
         echo json_encode(["token" => $token]);
     } else {
         http_response_code(401);
-        echo json_encode(["status" => "not authorized4"]);
+        echo json_encode(["status" => "not authorized4: " . bin2hex($expected) ]);
     }
     exit;
 }

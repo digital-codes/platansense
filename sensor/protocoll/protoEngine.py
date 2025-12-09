@@ -3,9 +3,6 @@ import requests
 import json
 import time
 import network
-import machine
-import random
-import binascii
 
 
 class ProtoEngine:
