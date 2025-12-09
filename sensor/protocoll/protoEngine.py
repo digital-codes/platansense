@@ -141,7 +141,7 @@ class ProtoEngine:
     def check(self,name):
         if self.state != "connected":
             raise ValueError("Not connected. Cannot upload data.")
-        payload = {"command": "check", "token": self.token, "session": self.session, "id": self.id, "name": name}
+        payload = {"command": "check", "token": self.token, "id": self.id, "name": name}
         resp = requests.post(self.base_url + "/sensorDownload.php", json=payload)
         if resp.status_code != 200:
             self._transit(self.state, "online")
@@ -154,7 +154,19 @@ class ProtoEngine:
         return result
     
     def download(self,name,chunk):
-        pass
+        if self.state != "connected":
+            raise ValueError("Not connected. Cannot upload data.")
+        payload = {"command": "down", "token": self.token, "id": self.id, "name": name, "chunk": chunk}
+        resp = requests.post(self.base_url + "/sensorDownload.php", json=payload)
+        if resp.status_code != 200:
+            self._transit(self.state, "online")
+            if self.debug:
+                print("Download response:", resp.status_code, resp.text)
+            raise ValueError(f"Download request failed with status code {resp.status_code}, {resp.text}.")
+        result = resp.json()
+        if self.debug:
+            print("Download response:", result)
+        return result
 
 #a = cryptolib.aes("1234567812345678",2,b"1234123412341234")
 #x = a.encrypt(b"1234123412341234")
@@ -193,6 +205,15 @@ if __name__ == "__main__":
         chunkSize = resp.get("chunksize", 0)
         print(f"Chunks: {chunks}, Chunk Size: {chunkSize}")
         
+        for c in range(chunks):
+            print(f"Downloading chunk {c+1}/{chunks}...")
+            resp = pt.download(name, c)
+            print("Downloaded chunk data:", resp)
+            dt = binascii.a2b_base64(resp.get("data", ""))
+            print("Decoded chunk data:", dt.decode('utf-8'))
+            # Implement download logic here
+            # resp = pt.download(name, c)
+            # print("Downloaded chunk data:", resp)
         
     pt.disconnect()
     if pt.state != "offline":
