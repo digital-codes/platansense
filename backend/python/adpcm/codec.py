@@ -1,4 +1,5 @@
 import numpy as np
+import wave
 
 # IMA ADPCM step and index tables
 step_table = np.array([
@@ -103,6 +104,146 @@ def adpcm_decode(adpcm_data: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------
+# 🎵  WAV converter
+# ---------------------------------------------------------------------
+def convertFromWav(wav_bytes: bytes, target_rate: int = 22050) -> np.ndarray:
+    """
+    Convert WAV byte data to PCM int16 samples.
+
+    Parameters
+    ----------
+    wav_bytes : bytes
+        Byte data of a WAV file.
+
+    Returns
+    -------
+    np.ndarray[int16]
+        PCM samples as int16 numpy array.
+    """
+    import io
+
+    with wave.open(io.BytesIO(wav_bytes), 'rb') as wav_file:
+        n_channels = wav_file.getnchannels()
+        sampwidth = wav_file.getsampwidth()
+        n_frames = wav_file.getnframes()
+        framerate = wav_file.getframerate()
+
+        frames = wav_file.readframes(n_frames)
+
+        # Convert raw bytes to PCM int16, handling various sample widths
+        if sampwidth == 1:
+            # 8-bit WAV: unsigned
+            raw = np.frombuffer(frames, dtype=np.uint8).astype(np.int16)
+            raw = (raw - 128) << 8
+        elif sampwidth == 2:
+            # 16-bit WAV: signed little-endian
+            raw = np.frombuffer(frames, dtype='<i2').astype(np.int32)
+        elif sampwidth == 3:
+            # 24-bit WAV: convert manually to int32 then to int16
+            b = np.frombuffer(frames, dtype=np.uint8)
+            # Ensure length is multiple of 3
+            if b.size % 3 != 0:
+                b = b[:-(b.size % 3)]
+            b = b.reshape(-1, 3)
+            # Little-endian: b0 + b1<<8 + b2<<16, sign extend if b2 & 0x80
+            raw32 = (b[:, 0].astype(np.int32) |
+                 (b[:, 1].astype(np.int32) << 8) |
+                 (b[:, 2].astype(np.int32) << 16))
+            sign_mask = (raw32 & 0x800000) != 0
+            raw32[sign_mask] |= ~0xFFFFFF  # sign extend
+            # Reduce 24->16 by shifting
+            raw = (raw32 >> 8).astype(np.int32)
+        elif sampwidth == 4:
+            # 32-bit WAV: signed little-endian -> convert to int16 by shifting
+            raw32 = np.frombuffer(frames, dtype='<i4').astype(np.int32)
+            raw = (raw32 >> 16).astype(np.int32)
+        else:
+            # Unknown sample width: treat bytes as silence
+            raw = np.zeros(n_frames * n_channels, dtype=np.int32)
+
+        # Convert to shape (n_frames, n_channels)
+        try:
+            raw = raw.reshape(-1, n_channels)
+        except Exception:
+            # If reshape fails, try to infer channels by truncation/padding
+            total_samples = raw.size
+            expected = n_frames * n_channels
+            if total_samples > expected:
+                raw = raw[:expected].reshape(-1, n_channels)
+            else:
+                # pad with zeros
+                pad = expected - total_samples
+                raw = np.concatenate([raw, np.zeros(pad, dtype=raw.dtype)])
+                raw = raw.reshape(-1, n_channels)
+
+        # Convert to mono by averaging channels (preserve as float for resampling precision)
+        if n_channels == 1:
+            pcm = raw[:, 0].astype(np.float32)
+        else:
+            pcm = raw.mean(axis=1).astype(np.float32)
+
+        # Clip to int16 range just in case, then resample if target_rate differs
+        pcm = np.clip(pcm, -32768, 32767)
+
+        if target_rate != framerate and pcm.size > 1:
+            # Simple linear resampling (no external deps)
+            src_len = pcm.size
+            dst_len = int(round(src_len * float(target_rate) / float(framerate)))
+            if dst_len <= 0:
+                dst_len = 1
+            xp = np.linspace(0, src_len - 1, num=src_len)
+            xnew = np.linspace(0, src_len - 1, num=dst_len)
+            pcm_resampled = np.interp(xnew, xp, pcm).astype(np.float32)
+            pcm_data = np.round(pcm_resampled).astype(np.int16)
+        else:
+            pcm_data = np.round(pcm).astype(np.int16)
+
+    return pcm_data
+
+# ------------------------------------------------------
+#  wav format converter
+# ------------------------------------------------------
+import wave
+
+# … your existing tables + adpcm_encode/adpcm_decode/maximise_volume …
+
+def load_wav_as_mono_pcm(path: str, target_rate: int) -> np.ndarray:
+    """
+    Load a WAV file, convert to mono and resample to target_rate.
+    Returns int16 numpy array.
+    """
+    with wave.open(path, "rb") as wf:
+        n_channels = wf.getnchannels()
+        sampwidth = wf.getsampwidth()
+        framerate = wf.getframerate()
+        n_frames = wf.getnframes()
+        frames = wf.readframes(n_frames)
+
+    if sampwidth != 2:
+        raise RuntimeError(f"Only 16-bit WAV supported, got {8 * sampwidth}-bit")
+
+    pcm = np.frombuffer(frames, dtype=np.int16)
+
+    # Mix down to mono if needed
+    if n_channels > 1:
+        pcm = pcm.reshape(-1, n_channels)
+        pcm = pcm.mean(axis=1).astype(np.int16)
+
+    if framerate == target_rate:
+        return pcm
+
+    # Simple linear resample using numpy
+    duration = pcm.shape[0] / framerate
+    old_t = np.linspace(0.0, duration, num=pcm.shape[0], endpoint=False)
+    new_n = int(round(duration * target_rate))
+    new_t = np.linspace(0.0, duration, num=new_n, endpoint=False)
+    resampled = np.interp(new_t, old_t, pcm).astype(np.int16)
+
+    return resampled
+
+
+
+# ---------------------------------------------------------------------
 # 🏋️‍♂️  Volume maximiser
 # ---------------------------------------------------------------------
 def maximise_volume(pcm_i16: np.ndarray, headroom: float = 0.002) -> np.ndarray:
@@ -151,7 +292,6 @@ def maximise_volume(pcm_i16: np.ndarray, headroom: float = 0.002) -> np.ndarray:
 
 if __name__ == "__main__":
     import argparse
-    import wave
 
     parser = argparse.ArgumentParser(description="ADPCM Encoder/Decoder")
     parser.add_argument("-i", "--input", required=True, type=str, help="Input RAW file")
@@ -159,19 +299,31 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--encoded", required=True, type=str, help="Output Encoded file")
     parser.add_argument("-s", "--samplingrate", type=int, default=22050, help="Sampling rate for output WAV file")
     parser.add_argument("-m", "--maximise", action="store_true", help="Maximise volume of output WAV file")
+    parser.add_argument("-r", "--raw", action="store_true", help="Input is raw audio, not encoded")
+    parser.add_argument("-w", "--wav", action="store_true", help="Input is wav audio")
     args = parser.parse_args()
 
     # Load raw PCM samples from Input
     with open(args.input, "rb") as f:
-        #raw = np.frombuffer(f.read(), dtype=np.int16)
         raw = np.frombuffer(f.read(), dtype=np.uint8)
 
 
     print(f"Loaded {len(raw)} samples from {args.input}")
-    # Encode to ADPCM
-    decoded = adpcm_decode(raw)
-    print(f"Decoded {len(decoded)} samples from ADPCM")
+    if args.raw:
+        decoded = raw.view(np.int16)
+        print(f"Using {len(decoded)} raw PCM samples")
+    elif args.wav:
+        # Convert from WAV
+        decoded = convertFromWav(raw,args.samplingrate)
+        print(f"Using {len(decoded)} WAV PCM samples")
+    else:
+        # Decode from ADPCM
+        decoded = adpcm_decode(raw)
+        print(f"Decoded {len(decoded)} samples from ADPCM")
 
+    # maximize option
+    if args.maximise:
+        decoded = maximise_volume(decoded)
 
     # Encode to ADPCM
     encoded = adpcm_encode(decoded)
@@ -183,8 +335,6 @@ if __name__ == "__main__":
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(args.samplingrate)
-        if args.maximise:
-            decoded = maximise_volume(decoded)
         w.writeframes(decoded.tobytes())
     
 
