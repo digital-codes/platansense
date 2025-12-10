@@ -515,7 +515,7 @@ class EchoBase:
             self.es_handle.reset()
             self.es_handle.init_default(bits=16, fmt="i2s", slave=True)
             self.es_handle.start(record=False) # playback
-            self.es_handle.set_volume(80)
+            self.es_handle.set_volume(self._spk_volume)
             self.es_handle.mute(False)
 
         except Exception:
@@ -712,7 +712,6 @@ class EchoBase:
             playsize = CHUNK_SIZE if size > CHUNK_SIZE else size            
             i2slen = size - CHUNK_SIZE if size > CHUNK_SIZE else 0
             i2spos = playsize
-            playport = self.i2s
             isplaying = True
             if self.debug:
                 print(f"play size: {size}, playsize: {playsize}, remaining: {i2slen}")

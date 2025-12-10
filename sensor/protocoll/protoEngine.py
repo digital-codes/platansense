@@ -179,7 +179,7 @@ if __name__ == "__main__":
     else:
         baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
     id = 1
-    key = "00112233445566778899aabbccddeeff"
+    key = "112233445566778899aabbccddeeff00"
 
 
     pt = ProtoEngine("karlsruhe.freifunk.net", baseUrl, id, key)
