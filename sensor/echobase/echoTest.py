@@ -3,7 +3,7 @@ import adpcm
 import time 
 
 
-eb = echoBase.EchoBase()#debug=True)
+eb = echoBase.EchoBase(debug=True)
 eb.init(sample_rate=8000)
 eb.setSpeakerVolume(90)
 eb.play("/media/test8000.wav")
@@ -40,6 +40,15 @@ for gain in range(7,8):
     for pgain in range(7,11):
         print("Mic gain:",gain,"PGA gain:",pgain)
         eb.setMicPGAGain(pgain)
-        eb.record(recbuf,reclen)   
+        irqMode = True if pgain % 2 == 0 else False
+        print("  Recording with IRQ mode =", irqMode)
+        eb.record(recbuf,reclen,useIrq=irqMode)   
+        if irqMode:
+            while eb.getRecordStatus():
+                print(".", end="")
+                time.sleep_ms(50)
+            print()
+        print("  Playing back")
         eb.play(recbuf,reclen)
+
 

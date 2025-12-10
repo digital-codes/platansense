@@ -10,19 +10,21 @@
 
 from machine import Pin, I2C, I2S
 import time
+from micropython import const, alloc_emergency_exception_buf
+alloc_emergency_exception_buf(100)
 
 # ---- PI4IOE5V6408 I/O expander constants ----
-PI4IOE_ADDR          = 0x43
-PI4IOE_REG_CTRL      = 0x00
-PI4IOE_REG_IO_PP     = 0x07
-PI4IOE_REG_IO_DIR    = 0x03
-PI4IOE_REG_IO_OUT    = 0x05
-PI4IOE_REG_IO_PULLUP = 0x0D
+PI4IOE_ADDR          = const(0x43)
+PI4IOE_REG_CTRL      = const(0x00)
+PI4IOE_REG_IO_PP     = const(0x07)
+PI4IOE_REG_IO_DIR    = const(0x03)
+PI4IOE_REG_IO_OUT    = const(0x05)
+PI4IOE_REG_IO_PULLUP = const(0x0D)
 
 # ES8311 address
-ES8311_ADDR = 0x18
+ES8311_ADDR = const(0x18)
 
-CHUNK_SIZE = 4096
+CHUNK_SIZE = const(4096)
 
 
 try:
@@ -31,20 +33,36 @@ try:
 except ImportError:
     es8311 = None  # You must provide this
 
-# IRQ stuff
-playlen, playpos, playbuf, isplaying = 0,0,None,False
+# IRQ globals
+i2slen, i2spos, i2sbuf, isplaying, isrecording = 0,0,None,False, False
+# Play IRQ stuff
 def playHandler(port):
-    global playlen, playpos, playbuf, isplaying, playport
+    global i2slen, i2spos, i2sbuf, isplaying
     # port is I2S instance
-    playlen -= CHUNK_SIZE
-    if playlen <= 0:
+    i2slen -= CHUNK_SIZE
+    if i2slen <= 0:
         isplaying = False
         port.irq(None)
     else:
-        chunk = CHUNK_SIZE if playlen >= CHUNK_SIZE else playlen
-        mv = memoryview(playbuf)[playpos:playpos+chunk]
+        chunk = CHUNK_SIZE if i2slen >= CHUNK_SIZE else i2slen
+        mv = memoryview(i2sbuf)[i2spos:i2spos+chunk]
         port.write(mv)
-        playpos += chunk
+        i2spos += chunk
+
+# Rec IRQ stuff
+isrecording = False
+def recHandler(port):
+    global i2slen, i2spos, i2sbuf, isrecording
+    # port is I2S instance
+    i2slen -= CHUNK_SIZE
+    if i2slen <= 0:
+        isrecording = False
+        port.irq(None)
+    else:
+        chunk = CHUNK_SIZE if i2slen >= CHUNK_SIZE else i2slen
+        mv = memoryview(i2sbuf)[i2spos:i2spos+chunk]
+        port.readinto(mv)
+        i2spos += chunk
 
 
 class EchoBase:
@@ -103,10 +121,6 @@ class EchoBase:
         self._mic_adc_volume = 100
         self._spk_volume = 90
         self._i2s_irq = None
-        self._is2_isplaying = False
-        self._i2s_playlen = 0
-        self._i2s_playpos = 0
-        self._i2s_playbuf = None
         
 
     # ---------- public API ----------
@@ -323,7 +337,7 @@ class EchoBase:
 
     # --- record / play overload emulation ---
 
-    def record(self, arg1, size = None):
+    def record(self, arg1, size = None, useIrq=False):
         """
         record(buffer, size)
         record(filename, size)
@@ -340,6 +354,10 @@ class EchoBase:
             buffer = arg1
             if size is None:
                 raise ValueError("size required for record(buffer, size)")
+            if useIrq:
+                self._i2s_irq = recHandler
+            else:
+                self._i2s_irq = None
             return self._record_to_buffer(buffer, size)
         elif isinstance(arg1, str):
             if self.debug:
@@ -347,6 +365,7 @@ class EchoBase:
             filename = arg1
             if size is None:
                 raise ValueError("size required for record(filename, size)")
+            self._i2s_irq = None
             return self._record_to_file(filename, size)
         else:
             if self.debug:
@@ -376,6 +395,7 @@ class EchoBase:
             if self.debug:
                 print("EchoBase.play file:", arg1, size)
             filename = arg1
+            self._i2s_irq = None
             # size is ignored; we use open()
             return self._play_from_file(filename)
 
@@ -394,6 +414,17 @@ class EchoBase:
         if self.i2s is None:
             return False
         return isplaying
+    
+    def getRecordStatus(self):
+        global isrecording
+        """
+        Check if I2S is currently recording.
+
+        returns: True if recording, False otherwise.
+        """
+        if self.i2s is None:
+            return False
+        return isrecording
     
 
 
@@ -554,6 +585,7 @@ class EchoBase:
     # --- I2S record/play primitives ---
 
     def _record_to_buffer(self, buffer, size):
+        global i2slen, i2spos, i2sbuf, isrecording
         """
         Record `size` bytes into `buffer` via I2S RX.
         """
@@ -574,7 +606,23 @@ class EchoBase:
         mv = memoryview(buffer)[:size]
 
         if self._i2s_irq:
+            if self.debug:
+                print("record with irq")
+            i2sbuf = mv
+            recsize = CHUNK_SIZE if size > CHUNK_SIZE else size            
+            i2slen = size - CHUNK_SIZE if size > CHUNK_SIZE else 0
+            i2spos = recsize
+            isrecording = True
+            if self.debug:
+                print(f"rec size: {size}, recsize: {recsize}, remaining: {i2slen}")
+                print("I2S:", self.i2s)
             self.i2s.irq(self._i2s_irq)
+            try:
+                self.i2s.readinto(mv[:recsize])
+            except Exception:
+                return False
+            return True
+            
         else:
             self.i2s.irq(None)  
 
@@ -636,7 +684,7 @@ class EchoBase:
         return True
 
     def _play_from_buffer(self, buffer, size):
-        global playlen, playpos, playbuf, isplaying, playport
+        global i2slen, i2spos, i2sbuf, isplaying
         """
         Play `size` bytes from `buffer` via I2S TX.
         """
@@ -660,14 +708,14 @@ class EchoBase:
         if self._i2s_irq:
             if self.debug:
                 print("play with irq")
-            playbuf = mv
+            i2sbuf = mv
             playsize = CHUNK_SIZE if size > CHUNK_SIZE else size            
-            playlen = size - CHUNK_SIZE if size > CHUNK_SIZE else 0
-            playpos = playsize
+            i2slen = size - CHUNK_SIZE if size > CHUNK_SIZE else 0
+            i2spos = playsize
             playport = self.i2s
             isplaying = True
             if self.debug:
-                print(f"play size: {size}, playsize: {playsize}, remaining: {playlen}")
+                print(f"play size: {size}, playsize: {playsize}, remaining: {i2slen}")
                 print("I2S:", self.i2s)
             self.i2s.irq(playHandler)
             try:

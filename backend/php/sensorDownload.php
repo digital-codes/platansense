@@ -57,12 +57,23 @@ if ($command === "check" && isset($input['name']) && isset($input['id']) && isse
 
     $name = $input['name'];
 
-    $filePath = $audioDir . $name . ".adpcm";
+    // check lock file exists 
+    $filePath = $audioDir . $name . ".lock";
     if (!file_exists($filePath)) {
         http_response_code(404);
         echo json_encode(["status" => "file not found"]);
         exit;
     }
+    // then check audio file exists
+    $filePath = $audioDir . $name . ".adpcm";
+    if (!file_exists($filePath)) {
+        http_response_code(408);
+        echo json_encode(["status" => "file not ready. retry later"]);
+        exit;
+    }
+
+    // remove the lock file to indicate download can start
+    unlink($audioDir . $name . ".lock");    
 
     $fileSize = filesize($filePath);
     $numChunks = (int)ceil($fileSize / $chunkSize);
