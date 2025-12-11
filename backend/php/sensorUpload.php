@@ -169,6 +169,13 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             echo json_encode(["error" => "Failed to write audio file"]);
             exit;
         }
+        // simulate some processing by saving a lock file
+        $lockFile = $audioDir . $uuid . ".lock";
+        if (file_put_contents($lockFile, "locked") === false) {
+            http_response_code(500);
+            echo json_encode(["error" => "Failed to write lock file"]);
+            exit;
+        }
     } catch (Exception $e) {
         http_response_code(500);
         echo json_encode(["error" => "Failed to save data"]);

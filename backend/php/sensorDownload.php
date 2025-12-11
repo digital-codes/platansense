@@ -55,17 +55,30 @@ if ($command === "check" && isset($input['name']) && isset($input['id']) && isse
         exit;
     }
 
-    $name = $input['name'];
+    $name = $input['name'] ?? '';
+    // keep only the filename (basename) — strips any path components
+    $name = basename((string)$name);
+    // remove any null bytes just in case
+    $name = str_replace("\0", '', $name);
 
-    // check lock file exists 
-    $filePath = $audioDir . $name . ".lock";
-    if (!file_exists($filePath)) {
-        http_response_code(404);
-        echo json_encode(["status" => "file not found"]);
+    if ($name === '' || strlen($name) > 255) {
+        http_response_code(400);
+        echo json_encode(["status" => "invalid name"]);
         exit;
     }
+
+    // check lock file exists only if $name starts with "Sensor"
+    if (str_starts_with($name, "Sensor")) {
+        $filePath = $audioDir . $name . ".lock";
+        if (!file_exists($filePath)) {
+            http_response_code(404);
+            echo json_encode(["status" => "file not found " . $name]);
+            exit;
+        }
+    }
+
     // then check audio file exists
-    $filePath = $audioDir . $name . ".adpcm";
+    $filePath = $audioDir . $name . "_chat.adpcm";
     if (!file_exists($filePath)) {
         http_response_code(408);
         echo json_encode(["status" => "file not ready. retry later"]);
@@ -79,6 +92,8 @@ if ($command === "check" && isset($input['name']) && isset($input['id']) && isse
     $numChunks = (int)ceil($fileSize / $chunkSize);
 
     echo json_encode([
+        "status" => "ready",
+        "size" => $fileSize,
         "chunks" => $numChunks,
         "chunksize" => $chunkSize
     ]);
@@ -103,7 +118,7 @@ if ($command === "down" && isset($input['name']) && isset($input['chunk']) && is
     $name = $input['name'];
     $chunk = (int)$input['chunk'];
 
-    $filePath = $audioDir . $name . ".adpcm";
+    $filePath = $audioDir . $name . "_chat.adpcm";
     if (!file_exists($filePath)) {
         http_response_code(404);
         echo json_encode(["status" => "file not found"]);
