@@ -106,7 +106,6 @@ for c in range(chunks):
     #resp = task.result()
     resp = pt.download(name, c, format=format)
     #print("Downloaded chunk data:", resp)
-    print("x", end="")
     dt = binascii.a2b_base64(resp.get("data", ""))
     if format == "wav":
         w = len(dt)
