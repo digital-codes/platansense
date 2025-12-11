@@ -295,18 +295,23 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="ADPCM Encoder/Decoder")
     parser.add_argument("-i", "--input", required=True, type=str, help="Input RAW file")
-    parser.add_argument("-o", "--output", required=True, type=str, help="Output WAV file")
-    parser.add_argument("-e", "--encoded", required=True, type=str, help="Output Encoded file")
+    parser.add_argument("-o", "--output", default=None, type=str, help="Output WAV file")
+    parser.add_argument("-e", "--encoded", default=None, type=str, help="Output Encoded file")
     parser.add_argument("-s", "--samplingrate", type=int, default=22050, help="Sampling rate for output WAV file")
     parser.add_argument("-m", "--maximise", action="store_true", help="Maximise volume of output WAV file")
     parser.add_argument("-r", "--raw", action="store_true", help="Input is raw audio, not encoded")
     parser.add_argument("-w", "--wav", action="store_true", help="Input is wav audio")
     args = parser.parse_args()
 
-    # Load raw PCM samples from Input
+    # Load samples from Input
     with open(args.input, "rb") as f:
         raw = np.frombuffer(f.read(), dtype=np.uint8)
 
+    if args.output is None and args.encoded is None:
+        raise RuntimeError("At least one of --output or --encoded must be specified")
+    
+    if args.raw and args.wav:
+        raise RuntimeError("Only one of --raw or --wav can be specified")
 
     print(f"Loaded {len(raw)} samples from {args.input}")
     if args.raw:
@@ -331,15 +336,18 @@ if __name__ == "__main__":
 
 
     # Save decoded PCM as WAV
-    with wave.open(args.output, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(args.samplingrate)
-        w.writeframes(decoded.tobytes())
+    if args.output is not None:
+        with wave.open(args.output, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(args.samplingrate)
+            w.writeframes(decoded.tobytes())
+        print(f"Saved WAV to {args.output}")
     
 
     # Save encoded WAV as RAW
-    with open(args.encoded, "wb") as f:
-        f.write(encoded.tobytes())
+    if args.encoded is not None:
+        with open(args.encoded, "wb") as f:
+            f.write(encoded.tobytes())
+        print(f"Encoded ADPCM to {args.encoded}")
     
-    print(f"Saved decoded PCM to {args.output} and encoded ADPCM to {args.encoded}")
