@@ -38,6 +38,8 @@ eb.setShift(0)
 eb.setSpeakerVolume(90)
 eb.play("/media/test8000.wav")
 
+# set format
+format = "wav"  # or "adpcm"
 
 # go online
 baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
@@ -59,13 +61,16 @@ recbuf_ = bytearray(reclen_)
 eb.record(recbuf_,reclen_)   
 print("Recording done")
 # compress
-recbuf = bytearray(reclen_//4) # max size after decode
-reclen = adpcm.encode_into(recbuf_, recbuf)
-print("Decoded ADPCM data into buffer, size:", reclen)
-
+if format == "adpcm":
+    recbuf = bytearray(reclen_//4) # max size after decode
+    reclen = adpcm.encode_into(recbuf_, recbuf)
+    print("Decoded ADPCM data into buffer, size:", reclen)
+else:
+    recbuf = recbuf_
+    reclen = reclen_
 
 # upload audio
-resp = pt.upload(recbuf)
+resp = pt.upload(recbuf,format=format)
 name = resp.get("uuid", None)
 if not name:
     print("Upload failed")
@@ -73,14 +78,21 @@ if not name:
     raise BaseException("Upload failed")
 
 print("Upload OK, name:", name)
+# overwrite name for long audio test 
 name = "longAudio"
-resp = pt.check(name)
+while True:
+    resp = pt.check(name, format=format)
+    if resp.get("status") == "ready":
+        break
+    print("File not ready, retrying in 1s...")
+    time.sleep(1)
 print("Check OK, size:", resp.get("size",0))
 chunks = resp.get("chunks", 0)
 chunkSize = resp.get("chunksize", 0)
 print(f"Chunks: {chunks}, Chunk Size: {chunkSize}")
-dtbuf = [bytearray(4*chunkSize),  # max size after decode
-         bytearray(4*chunkSize)]  # max size after decode
+bufMult = 4 if format == "adpcm" else 1
+dtbuf = [bytearray(bufMult*chunkSize),  # max size after decode
+         bytearray(bufMult*chunkSize)]  # max size after decode
 bufsel = 0
 eb.setSpeakerVolume(100)
 
@@ -92,10 +104,17 @@ for c in range(chunks):
     #task = asyncio.create_task(coroutine=getData(name, c))
     #await task
     #resp = task.result()
-    resp = pt.download(name, c)
+    resp = pt.download(name, c, format=format)
     #print("Downloaded chunk data:", resp)
+    print("x", end="")
     dt = binascii.a2b_base64(resp.get("data", ""))
-    w = adpcm.decode_into(dt, dtbuf[bufsel%2])
+    if format == "wav":
+        w = len(dt)
+        idx = bufsel % 2
+        # copy data into buffer (do not assign reference)
+        dtbuf[idx][:w] = dt
+    else:
+        w = adpcm.decode_into(dt, dtbuf[bufsel%2])
     while True:
         irqstate = machine.disable_irq()
         if not eb.getPlayStatus():

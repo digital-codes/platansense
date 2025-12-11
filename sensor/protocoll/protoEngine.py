@@ -123,10 +123,10 @@ class ProtoEngine:
         return True
     
 
-    def upload(self, data):
+    def upload(self, data, format="adpcm"):
         if self.state != "connected":
             raise ValueError("Not connected. Cannot upload data.")
-        payload = {"command": "data", "token": self.token, "session": self.session, "id": self.id, "data": binascii.b2a_base64(data).decode('utf-8')}
+        payload = {"command": "data", "token": self.token, "session": self.session, "id": self.id, "format": format, "data": binascii.b2a_base64(data).decode('utf-8')}
         resp = requests.post(self.base_url + "/sensorUpload.php", json=payload)
         if resp.status_code != 200:
             self._transit(self.state, "online")
@@ -138,10 +138,10 @@ class ProtoEngine:
             print("Upload response:", result)
         return result
 
-    def check(self,name):
+    def check(self,name, format="adpcm"):
         if self.state != "connected":
             raise ValueError("Not connected. Cannot upload data.")
-        payload = {"command": "check", "token": self.token, "id": self.id, "name": name}
+        payload = {"command": "check", "token": self.token, "id": self.id, "name": name, "format": format}
         resp = requests.post(self.base_url + "/sensorDownload.php", json=payload)
         if resp.status_code == 408:
             if self.debug:
@@ -157,10 +157,10 @@ class ProtoEngine:
             print("Upload response:", result)
         return result
     
-    def download(self,name,chunk):
+    def download(self,name,chunk, format="adpcm"):
         if self.state != "connected":
             raise ValueError("Not connected. Cannot upload data.")
-        payload = {"command": "down", "token": self.token, "id": self.id, "name": name, "chunk": chunk}
+        payload = {"command": "down", "token": self.token, "id": self.id, "name": name, "chunk": chunk, "format": format}
         resp = requests.post(self.base_url + "/sensorDownload.php", json=payload)
         if resp.status_code != 200:
             self._transit(self.state, "online")
@@ -186,6 +186,7 @@ if __name__ == "__main__":
     id = 1
     key = "00112233445566778899aabbccddeeff"
 
+    format = "wav"  # or "wav"
 
     pt = ProtoEngine("karlsruhe.freifunk.net", baseUrl, id, key)
     pt.setDebug(True)
@@ -197,7 +198,7 @@ if __name__ == "__main__":
         print("Join failed")
 
     dummyData = b'This is a test payload for encryption.'
-    resp = pt.upload(dummyData)
+    resp = pt.upload(dummyData, format=format)
     
     name = resp.get("uuid", None)
     if not name:
@@ -205,7 +206,7 @@ if __name__ == "__main__":
     else:
         print("Upload OK, name:", name)
         while True:
-            resp = pt.check(name)
+            resp = pt.check(name, format=format)
             if resp.get("status") == "ready":
                 break
             print("File not ready, retrying in 1s...")
@@ -222,7 +223,7 @@ if __name__ == "__main__":
             while pt.state == "connected":
                 for c in range(chunks):
                     print(f"Downloading chunk {c+1}/{chunks}...")
-                    resp = pt.download(name, c)
+                    resp = pt.download(name, c, format=format)
                     print("Downloaded chunk data:", resp)
                     dt = binascii.a2b_base64(resp.get("data", ""))
                     print("Decoded chunk data:", dt.decode('utf-8'))

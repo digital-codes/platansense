@@ -28,7 +28,7 @@ $issuedBy = $config['JWT']['issuedBy'];
 
 
 $audioDir = __DIR__ . "/audio/";
-$chunkSize = 4096; // or any other chunk size you want
+$chunkSize = 4096*16; // adpcm might work with 4 or 8*4096. wav needs 16*4096
 
 
 // ===== INPUT =====
@@ -78,7 +78,8 @@ if ($command === "check" && isset($input['name']) && isset($input['id']) && isse
     }
 
     // then check audio file exists
-    $filePath = $audioDir . $name . "_chat.adpcm";
+    $audioFormat = $input['format'] ?? 'adpcm';
+    $filePath = $audioDir . $name . "_chat." . ($audioFormat == "adpcm" ? "adpcm" : "wav");
     if (!file_exists($filePath)) {
         http_response_code(408);
         echo json_encode(["status" => "file not ready. retry later"]);
@@ -118,7 +119,8 @@ if ($command === "down" && isset($input['name']) && isset($input['chunk']) && is
     $name = $input['name'];
     $chunk = (int)$input['chunk'];
 
-    $filePath = $audioDir . $name . "_chat.adpcm";
+    $audioFormat = $input['format'] ?? 'adpcm';
+    $filePath = $audioDir . $name . "_chat." . ($audioFormat == "adpcm" ? "adpcm" : "wav");
     if (!file_exists($filePath)) {
         http_response_code(404);
         echo json_encode(["status" => "file not found"]);
@@ -149,6 +151,7 @@ if ($command === "down" && isset($input['name']) && isset($input['chunk']) && is
 
         echo json_encode([
             "data" => base64_encode($data),
+            "format" => $audioFormat,
             "chunk" => $chunk,
             "length" => $dataLength,
             "chunks" => $numChunks

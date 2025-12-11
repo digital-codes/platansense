@@ -151,6 +151,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
 
     $uuid = uniqid($identifiedBy . "_", true);
     try {
+        $audioFormat = $input['format'] ?? 'adpcm';
         $audioData = base64_decode($input['data'], true);
         if ($audioData === false) {
             http_response_code(400);
@@ -163,7 +164,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             echo json_encode(["status" => "not authorized7"]);
             exit;
         }
-        $audioFile = $audioDir . $uuid . ".adpcm";
+        $audioFile = $audioDir . $uuid . ($audioFormat == "adpcm" ? ".adpcm" : ".wav");
         if (file_put_contents($audioFile, $audioData) === false) {
             http_response_code(500);
             echo json_encode(["error" => "Failed to write audio file"]);
