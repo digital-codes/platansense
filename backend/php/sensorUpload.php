@@ -125,6 +125,55 @@ if ($command === "challenge" && isset($input['id'], $input['session'], $input['c
     exit;
 }
 
+// raw data to wav for wav format
+/**
+ * Create a WAV file from raw PCM data.
+ *
+ * @param string $pcmData   Raw audio bytes (little‑endian signed integer samples)
+ * @param int    $sampleRate Sample rate in Hz (e.g., 8000)
+ * @param int    $bitsPerSample Bits per sample (8 or 16 are typical)
+ * @return string            Complete WAV file contents (header + PCM)
+ */
+function pcmToWav(string $pcmData, int $sampleRate = 8000, int $bitsPerSample = 16): string
+{
+    // ------------------------------------------------------------
+    // 1️⃣  Basic parameters
+    // ------------------------------------------------------------
+    $numChannels   = 1;                     // mono
+    $byteRate      = ($sampleRate * $numChannels * $bitsPerSample) / 8;
+    $blockAlign    = ($numChannels * $bitsPerSample) / 8;
+    $subchunk2Size = strlen($pcmData);      // size of the raw audio data
+
+    // ------------------------------------------------------------
+    // 2️⃣  Build the RIFF header (44 bytes total)
+    // ------------------------------------------------------------
+    $header = '';
+    $header .= pack('A4', 'RIFF');                         // ChunkID
+    $header .= pack('V', 36 + $subchunk2Size);             // ChunkSize = 36 + SubChunk2Size
+    $header .= pack('A4', 'WAVE');                         // Format
+
+    // fmt sub‑chunk
+    $header .= pack('A4', 'fmt ');                         // Subchunk1ID
+    $header .= pack('V', 16);                              // Subchunk1Size (PCM = 16)
+    $header .= pack('v', 1);                               // AudioFormat (1 = PCM)
+    $header .= pack('v', $numChannels);                   // NumChannels
+    $header .= pack('V', $sampleRate);                    // SampleRate
+    $header .= pack('V', $byteRate);                      // ByteRate
+    $header .= pack('v', $blockAlign);                    // BlockAlign
+    $header .= pack('v', $bitsPerSample);                 // BitsPerSample
+
+    // data sub‑chunk
+    $header .= pack('A4', 'data');                         // Subchunk2ID
+    $header .= pack('V', $subchunk2Size);                  // Subchunk2Size
+
+    // ------------------------------------------------------------
+    // 3️⃣  Concatenate header + raw PCM and return
+    // ------------------------------------------------------------
+    return $header . $pcmData;
+}
+
+
+
 // 3) DATA PACKET
 if ($command === "data" && isset($input['id']) && isset($input['token'], $input['data'])) {
     $token = $input['token'];
@@ -163,6 +212,10 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             http_response_code(401);
             echo json_encode(["status" => "not authorized7"]);
             exit;
+        }
+        if ($audioFormat == "wav") {
+            // convert raw pcm to wav
+            $audioData = pcmToWav($audioData, 8000, 16);
         }
         $audioFile = $audioDir . $uuid . ($audioFormat == "adpcm" ? ".adpcm" : ".wav");
         if (file_put_contents($audioFile, $audioData) === false) {
