@@ -79,7 +79,7 @@ if not name:
 
 print("Upload OK, name:", name)
 # overwrite name for long audio test 
-name = "longAudio"
+#name = "longAudio"
 while True:
     resp = pt.check(name, format=format)
     if resp.get("status") == "ready":

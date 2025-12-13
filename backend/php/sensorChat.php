@@ -47,25 +47,14 @@ while ($running) {
         // part 2
         $wavPath = $audioDir . DIRECTORY_SEPARATOR . $base . '_chat.wav';
         if (!file_exists($wavPath)) {
-            // try to create atomically; if another process creates it concurrently, fopen('x') will fail
-            $fp = @fopen($wavPath, 'x');
-            if ($fp !== false) {
-                try {
-                    fwrite($fp, "wav 1234567890");
-                    fflush($fp);
-                } catch (Throwable $e) {
-                    echo date('c') . " Error writing to: $wavPath - " . $e->getMessage() . "\n";  
-                }
-                fclose($fp);
-                echo date('c') . " Created: $wavPath\n";
-            } else {
-                // ignore if already exists, otherwise report
-                if (!file_exists($wavPath)) {
-                    fwrite(STDERR, date('c') . " Failed to create: $wavPath\n");
-                }
+            $scriptPath = __DIR__ . '/sensorChatLlm.php'; // adjust filename as needed
+            $cmd = escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($scriptPath) . ' ' . escapeshellarg($base);
+            $chatResponse = @shell_exec($cmd);
+            if ($chatResponse === null) {
+                fwrite(STDERR, date('c') . " Failed to execute script: $scriptPath $base\n");
+                $chatResponse = '';
             }
         }
-
     }
 
     sleep($interval);

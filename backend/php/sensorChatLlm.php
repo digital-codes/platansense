@@ -64,8 +64,41 @@ if (!is_dir($audioDir)) {
 
 
 
-function chatQuery($key, $model, $url, $messages): array
+function chatQuery($key, $model, $url, $name): array
 {
+        global $audioDir;
+        $audioPath = $audioDir . $name . '.wav';
+        $audioBase64 = '';
+        if (!file_exists($audioPath)) {
+            return ["status" => "error", "reply" => "Audio file not found: $audioPath"];
+        }
+        $audioData = file_get_contents($audioPath);
+        if ($audioData === false) {
+            return ["status" => "error", "reply" => "Failed to read audio file: $audioPath"];
+        }
+        $audioBase64 = base64_encode($audioData);
+
+        $messages = [
+            ["role" => "system", "content" => "Du bist eine Platane in Karlsruhe. Erfinde eine Antwort basierend auf den Audiodaten. 
+            Berücksichte dabei schlechte Qualität der Audiodaten und versuche das Gesprochene bestmöglich zu transkribieren.
+            Beachte, dass du häufig als Baum angesprochen wirst, z.B. als Platane oder als Banane. Unterscheide dies.
+            Interpretiere die Eingabe grosszügig aber möglichst korrekt. Argumentiere nicht zu streng.
+            Antworte in Deutsch im JSON Format mit den Feldern Transscript und Antwort.
+            Wenn die Audiodaten unverständlich sind, gib ein leeres Transscript Feld zurück und der Antwort: 
+            das habe ich nicht verstanden.
+            Verwende nur dieses Format und nichts anderes."],
+            ];
+
+        $messages[] = [
+            "role" => "user",
+            "content" => [
+                [
+                    "type" => "input_audio",
+                    "input_audio" => $audioBase64,
+                ],
+            ]
+        ];
+
 
     // Prepare request payload
     $payload = json_encode([
@@ -95,11 +128,16 @@ function chatQuery($key, $model, $url, $messages): array
         $reply = $result['choices'][0]['message']['content'] ?? "No reply.";
         $result = [
             'status' => 'ok',
+            "model" => $model,
+            "prompt" => (isset($messages[0]) && isset($messages[0]['role']) && $messages[0]['role'] === 'system') ? [$messages[0]['content']] : [],
+            "url" => $url,
             'reply' => $reply
         ];
     } else {
         $result = [
             'status' => 'error',
+            "model" => $model,
+            "url" => $url,
             'reply' => "Error ($httpCode): $response"
         ];
     }
@@ -140,11 +178,13 @@ function ttsQuery($key, $url, $text, $voice): array
     if ($httpCode === 200) {
         $result = [
             'status' => 'ok',
+            "url" => $url,
             'audio_data' => $response
         ];
     } else {
         $result = [
             'status' => 'error',
+            "url" => $url,
             'reply' => "Error ($httpCode): $response"
         ];
     }
@@ -152,34 +192,23 @@ function ttsQuery($key, $url, $text, $voice): array
 }
 
 
-$messages = [
-    ["role" => "system", "content" => "Du bist eine Platane in Karlsruhe. Erfinde eine Antwort basierend auf dem Audio. 
-    Berücksichte dabei schlechte Qualität der Audiodaten und versuche das Gesprochene bestmöglich zu transkribieren.
-    Beachte, dass du häufig als Baum angesprochen wirst, z.B. als Platane oder als Banane. Unterscheide dies.
-    Antworte in Deutsch im JSON Format mit den Feldern Transscript und Antwort.
-    Wenn die Audiodaten unverständlich sind, gib ein leeres Transscript Feld zurück und der Antwort: 
-    das habe ich nicht verstanden.
-    Verwende nur dieses Format und nichts anderes."],
-    ["role" => "user", "content" => [
-        [
-            "type" => "input_audio",
-            "input_audio" => base64_encode(file_get_contents('./audio/sensor.wav')),
-        ]
-    ]]
-];
-
-$name = "sensor";
-
-$result = chatQuery(
-    $config['SENSOR']['chatkey'],
-    $config['SENSOR']['chatmodel'],
-    $config['SENSOR']['chaturl'],
-    $messages
-);
-print_r($result);
-
-if (!empty($result['reply']) && is_string($result['reply'])) {
-    $replyText = $result['reply'];
+function handleQuery($name,$voicenum = 1)
+{
+    global $config, $audioDir;
+    $llmResponse = chatQuery(
+        $config['SENSOR']['chatkey'],
+        $config['SENSOR']['chatmodel'],
+        $config['SENSOR']['chaturl'],
+        $name
+    );
+    // check response status
+    if ($llmResponse['status'] !== 'ok') {
+        return $llmResponse;
+    }
+    
+    // decode JSON reply
+    if (!empty($llmResponse['reply']) && is_string($llmResponse['reply'])) {
+    $replyText = $llmResponse['reply'];
 
     // extract JSON inside a fenced code block (```json ... ``` or ```)
     if (preg_match('/```(?:json)?\s*(.*?)\s*```/is', $replyText, $m)) {
@@ -193,51 +222,73 @@ if (!empty($result['reply']) && is_string($result['reply'])) {
     $decoded = json_decode($jsonText, true);
 
     if (json_last_error() === JSON_ERROR_NONE) {
-        $result['reply'] = $decoded;
+        $llmResponse['reply'] = $decoded;
     } else {
-        // keep original reply and add error info for debugging
-        $result['reply_parse_error'] = json_last_error_msg();
+        $llmResponse["status"] = "error";
+        $llmResponse["reply"] = "Failed to parse JSON from LLM reply.";
+        return $llmResponse;
+    }
+
+    // write json file
+    // prepare json file path
+    $jsonFile = $audioDir . $name . '.json';
+
+    // encode result to JSON
+    $jsonData = json_encode($llmResponse, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+    if ($jsonData === false) {
+        $err = json_last_error_msg();
+        $llmResponse["status"] = "error";
+        $llmResponse["reply"] = "Failed to encode result to JSON: $err";
+        return $llmResponse;
+    } else {
+        $written = file_put_contents($jsonFile, $jsonData);
+        if ($written === false) {
+            $llmResponse["status"] = "error";
+            $llmResponse["reply"] = "Failed to write JSON to file: $jsonFile";
+            return $llmResponse;
+        }
+    }
+  
+    // synthesize answer if Transscript and Antwort are present
+    if (isset($llmResponse['reply']['Antwort'])) {
+        $ttsResult = ttsQuery(
+            $config['SENSOR']['ttskey'],
+            $config['SENSOR']['ttsurl'],
+            $llmResponse['reply']['Antwort'],
+            explode(',', $config['SENSOR']['ttsvoices'])[$voicenum]
+        );
+        if ($ttsResult['status'] === 'ok') {
+            file_put_contents($audioDir . $name . '_chat.wav', $ttsResult['audio_data']);
+            $llmResponse['tts_audio_file'] = $audioDir . $name . '_chat.wav';
+        } else {
+            $llmResponse["status"] = "error";
+            $llmResponse["reply"] = "TTS Error: " . $ttsResult['reply'];
+            return $llmResponse;
+        }
+    } else {
+        $llmResponse["status"] = "error";
+        $llmResponse["reply"] = "No Antwort field in reply.";
+        return $llmResponse;
+    }
+    // done
+    return $llmResponse;
     }
 }
+
+// get name from CLI (or from GET as fallback), call handleQuery and output JSON
+global $argv;
+if (!isset($argv[1]) || trim($argv[1]) === '') {
+    fwrite(STDERR, "Usage: php " . basename(__FILE__) . " <name>\n");
+    exit(1);
+}
+$name = trim($argv[1]);
+
+return handleQuery($name, 0);
+
+/*
+$name = "sensor";
+$result = handleQuery($name,0);
 
 print_r($result);
-
-
-// prepare json file path
-$jsonFile = $audioDir . $name . '.json';
-
-// encode result to JSON
-$jsonData = json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-
-if ($jsonData === false) {
-    $err = json_last_error_msg();
-    echo "Failed to encode result to JSON: $err" . PHP_EOL;
-} else {
-    $written = file_put_contents($jsonFile, $jsonData);
-    if ($written === false) {
-        echo "Failed to write JSON to file: $jsonFile" . PHP_EOL;
-    } else {
-        echo "Result saved to $jsonFile" . PHP_EOL;
-    }
-}
-
-
-if (isset($result['reply']['Antwort'])) {
-    $ttsResult = ttsQuery(
-        $config['SENSOR']['ttskey'],
-        $config['SENSOR']['ttsurl'],
-        $result['reply']['Antwort'],
-        explode(',', $config['SENSOR']['ttsvoices'])[0]
-    );
-    if ($ttsResult['status'] === 'ok') {
-        file_put_contents($audioDir . $name . '_chat.wav', $ttsResult['audio_data']);
-        echo ("TTS audio saved to " . $audioDir . $name . "_chat.wav" . PHP_EOL);
-    } else {
-        echo ("TTS Error: " . $ttsResult['reply'] . PHP_EOL);
-    }
-} else {
-    echo ("No Antwort field in reply." . PHP_EOL);
-}   
-
-echo ("OK" . PHP_EOL);
-?>
+*/

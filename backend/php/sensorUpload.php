@@ -235,8 +235,8 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
         echo json_encode(["error" => "Failed to save data"]);
         exit;
     }
-
-    echo json_encode(["uuid" => $uuid]);
+    // respond with uuid
+    echo json_encode(["uuid" => $uuid,"status" => "processing"]);
     exit;
 }
 
