@@ -35,8 +35,8 @@ except:
 
 
 class DisPlay:
-    def __init__(self, config):
-        
+    def __init__(self, config, i2c=None):
+        self.i2c = i2c
         if config.get("io") and config["io"].get("led") is not None:
             neoPin = config["io"]["led"]
             p = machine.Pin(neoPin)
@@ -56,8 +56,9 @@ class DisPlay:
                 LCD_RST = 48 # 34    # reset
                 # LCD_BL = 45     # back light on S3R via I2C
                 from blctl import LP5562
-                sysi2c = machine.I2C(0, scl=machine.Pin(0), sda=machine.Pin(45), freq=400000)
-                backlight = LP5562(i2c_inst=sysi2c, addr=0x30)
+                if i2c is None:
+                    i2c = machine.I2C(0, scl=machine.Pin(0), sda=machine.Pin(45), freq=400000)
+                backlight = LP5562(i2c_inst=self.i2c, addr=0x30)
                 backlight.init()
                 backlight.backlight_on()
 
@@ -92,7 +93,10 @@ class DisPlay:
             self.convertColor = st7789py.color565
         else:
             self.type = None
-    
+
+    def getI2C(self):
+        return self.i2c
+        
     def fill(self, color):
         if self.type == "neopixel":
             self.hardware.fill(color)
