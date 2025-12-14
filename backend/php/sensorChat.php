@@ -22,29 +22,7 @@ $dir = rtrim($audioDir, DIRECTORY_SEPARATOR);
 while ($running) {
     foreach (glob($audioDir . DIRECTORY_SEPARATOR . 'Sensor*.lock') as $lockPath) {
         $base = pathinfo($lockPath, PATHINFO_FILENAME); // e.g. Sensor123
-        // check .adpcm first, then check for .wav  
-        $adpcmPath = $audioDir . DIRECTORY_SEPARATOR . $base . '_chat.adpcm';
 
-        if (!file_exists($adpcmPath)) {
-            // try to create atomically; if another process creates it concurrently, fopen('x') will fail
-            $fp = @fopen($adpcmPath, 'x');
-            if ($fp !== false) {
-                try {
-                    fwrite($fp, "1234567890");
-                    fflush($fp);
-                } catch (Throwable $e) {
-                    echo date('c') . " Error writing to: $adpcmPath - " . $e->getMessage() . "\n";  
-                }
-                fclose($fp);
-                echo date('c') . " Created: $adpcmPath\n";
-            } else {
-                // ignore if already exists, otherwise report
-                if (!file_exists($adpcmPath)) {
-                    fwrite(STDERR, date('c') . " Failed to create: $adpcmPath\n");
-                }
-            }
-        }
-        // part 2
         $wavPath = $audioDir . DIRECTORY_SEPARATOR . $base . '_chat.wav';
         if (!file_exists($wavPath)) {
             $scriptPath = __DIR__ . '/sensorChatLlm.php'; // adjust filename as needed

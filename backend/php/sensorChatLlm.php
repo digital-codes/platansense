@@ -196,6 +196,56 @@ function ttsQuery($key, $url, $text, $voice): array
     return $result;
 }
 
+function localTts($text, $name): array
+{
+    $postFields = [
+        'text' => $text,
+        'file' => $name
+    ];
+    // synthesizer 
+    $port = 9010;
+    $host = 'localhost';
+    $ttsUrl = "http://$host:$port/transscribe"; // or any endpoint you defined
+    // Prepare cURL for POST
+    $ch = curl_init($ttsUrl);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postFields));
+
+    // Execute POST request
+    $ttsResponse = curl_exec($ch);
+    $ttsHttpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $ttsError = curl_error($ch);
+    curl_close($ch);
+
+    if ($ttsHttpCode !== 200 || !$ttsResponse) {
+        return [
+            'status' => 'error',
+            'url' => $ttsUrl,
+            'reply' => "TTS failed: $ttsHttpCode"
+        ];
+    }
+    // Try to extract filename from TTS response if present (assume JSON with 'filename')
+    $ttsJson = json_decode($ttsResponse, true);
+    if (is_array($ttsJson) && isset($ttsJson['filename'])) {
+        $audioFile = $ttsJson['filename'];
+    } else {
+        return [
+            'status' => 'error',
+            'url' => $ttsUrl,
+            'reply' => "TTS did not return filename"
+        ];
+    }
+
+    return [
+        'status' => 'ok',
+        'url' => $ttsUrl,
+        'audio_file' => $audioFile
+    ];
+
+}
+
 
 function ttsQueryEl($key, $url, $text, $voice): array
 {
@@ -250,21 +300,21 @@ function ttsQueryEl($key, $url, $text, $voice): array
         $sampleRate = 8000;
         $bitsPerSample = 16;
         $channels = 1;
-        $byteRate = (int)($sampleRate * $channels * ($bitsPerSample / 8));
-        $blockAlign = (int)($channels * ($bitsPerSample / 8));
+        $byteRate = (int) ($sampleRate * $channels * ($bitsPerSample / 8));
+        $blockAlign = (int) ($channels * ($bitsPerSample / 8));
         $dataSize = strlen($pcm);
 
         // WAV header (RIFF little-endian)
         $header = "RIFF" . pack('V', 36 + $dataSize) .
-                  "WAVE" .
-                  "fmt " . pack('V', 16) . // Subchunk1Size for PCM
-                  pack('v', 1) .           // AudioFormat PCM = 1
-                  pack('v', $channels) .
-                  pack('V', $sampleRate) .
-                  pack('V', $byteRate) .
-                  pack('v', $blockAlign) .
-                  pack('v', $bitsPerSample) .
-                  "data" . pack('V', $dataSize);
+            "WAVE" .
+            "fmt " . pack('V', 16) . // Subchunk1Size for PCM
+            pack('v', 1) .           // AudioFormat PCM = 1
+            pack('v', $channels) .
+            pack('V', $sampleRate) .
+            pack('V', $byteRate) .
+            pack('v', $blockAlign) .
+            pack('v', $bitsPerSample) .
+            "data" . pack('V', $dataSize);
 
         $response = $header . $pcm;
         return [
@@ -358,6 +408,12 @@ function handleQuery($name, $tts = "murf", $voicenum = 1)
                     explode(',', $config['SENSOR']['ttsvoices_el'])[$voicenum]
                 );
             }
+            if ($tts == "local") {
+                $ttsResult = localTts(
+                    $llmResponse['reply']['Antwort'],
+                    $audioDir . $name . '_chat.wav'
+                );
+            }
             //  check tts result
             if (!$ttsResult) {
                 $llmResponse["status"] = "error";
@@ -366,7 +422,10 @@ function handleQuery($name, $tts = "murf", $voicenum = 1)
             }
             // 
             if ($ttsResult['status'] === 'ok') {
-                file_put_contents($audioDir . $name . '_chat.wav', $ttsResult['audio_data']);
+                // local returns the wav file already
+                if ($tts != "local") {
+                    file_put_contents($audioDir . $name . '_chat.wav', $ttsResult['audio_data']);
+                }
                 $llmResponse['tts_audio_file'] = $audioDir . $name . '_chat.wav';
             } else {
                 $llmResponse["status"] = "error";
@@ -391,7 +450,7 @@ if (!isset($argv[1]) || trim($argv[1]) === '') {
 }
 $name = trim($argv[1]);
 
-$result = handleQuery($name, "eleven", 1);
+$result = handleQuery($name, "local", 1);
 
 //print_r($result);
 

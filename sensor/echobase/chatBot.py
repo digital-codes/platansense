@@ -155,8 +155,9 @@ recbuf_ = bytearray(reclen_)
 rgbFill((0,0xc0,40)) 
 eb.record(recbuf_,reclen_)
 rgbFill((40,40,40))  # off
-print("Recording done")
+print("Recording done", reclen_)
 # compress
+format = "adpcm"  # "wav" or "adpcm"
 if format == "adpcm":
     recbuf = bytearray(reclen_//4) # max size after decode
     reclen = adpcm.encode_into(recbuf_, recbuf)
@@ -182,6 +183,7 @@ rgbFill((40,40,40))  # off
 print("Upload OK, name:", name)
 # overwrite name for long audio test 
 #name = "longAudio"
+format = "wav"  # "wav" or "adpcm"
 while True:
     rgbFill((0xa0,0,0xa0))
     resp = pt.check(name, format=format)

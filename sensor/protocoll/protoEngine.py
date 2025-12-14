@@ -186,7 +186,7 @@ if __name__ == "__main__":
     id = 1
     key = "00112233445566778899aabbccddeeff"
 
-    format = "wav"  # or "wav"
+    format = "adpcm" # "wav"  # or "wav"
 
     pt = ProtoEngine("karlsruhe.freifunk.net", baseUrl, id, key)
     pt.setDebug(True)

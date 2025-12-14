@@ -5,6 +5,11 @@ require 'vendor/autoload.php';
 
 require_once __DIR__ . '/buildToken.php';
 require_once __DIR__ . '/checkToken.php';
+require_once __DIR__ . '/codec.php';
+use function Adpcm\adpcm_decode;
+use function Adpcm\adpcm_encode;
+
+
 
 use Lcobucci\JWT\Encoding\JoseEncoder;
 use Lcobucci\JWT\Token\Parser;
@@ -213,11 +218,24 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             echo json_encode(["status" => "not authorized7"]);
             exit;
         }
-        if ($audioFormat == "wav") {
-            // convert raw pcm to wav
-            $audioData = pcmToWav($audioData, 8000, 16);
+        // check if conversion to wav is required
+        if ($audioFormat == "adpcm") {
+            $audioData = adpcm_decode($audioData);
+            if (is_array($audioData)) {
+                $pcm = '';
+                foreach ($audioData as $sample) {
+                    $val = (int)$sample;
+                    if ($val < -32768) $val = -32768;
+                    elseif ($val > 32767) $val = 32767;
+                    $pcm .= pack('v', $val & 0xFFFF); // little-endian 16-bit
+                }
+                $audioData = $pcm;
+            }
         }
-        $audioFile = $audioDir . $uuid . ($audioFormat == "adpcm" ? ".adpcm" : ".wav");
+        // add wav header
+        $audioData = pcmToWav($audioData, 8000, 16);
+        // save to wav
+        $audioFile = $audioDir . $uuid . ".wav";
         if (file_put_contents($audioFile, $audioData) === false) {
             http_response_code(500);
             echo json_encode(["error" => "Failed to write audio file"]);
