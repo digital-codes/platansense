@@ -157,7 +157,11 @@ class ES8311:
     # ---------- basic control ----------
 
     def reset(self):
-        self.write_reg(ES8311_RESET_REG00, 0x80)
+        self.write_reg(ES8311_RESET_REG00, 0x40 | 0x20) # reset + power down
+        time.sleep_ms(10)
+        self.write_reg(ES8311_RESET_REG00, 0x0) # release resets
+        time.sleep_ms(1)
+        self.write_reg(ES8311_RESET_REG00, 0x80) # power up
         time.sleep_ms(50)
 
     def mute(self, enable=True):
@@ -339,9 +343,15 @@ class ES8311:
         - configures sample rate via coeff table
         """
         # improve I2C noise immunity (same double-write as C)
-        self.write_reg(ES8311_GPIO_REG44, 0x08)
-        self.write_reg(ES8311_GPIO_REG44, 0x08)
-
+        # Due to occasional failures during the first I2C write with the ES8311 chip, 
+        # a second write is performed to ensure reliability
+        try:
+            self.write_reg(ES8311_GPIO_REG44, 0x08)
+        except Exception:
+            if self.debug:
+                print("ES8311: first write_reg() failed, retrying...")
+            self.write_reg(ES8311_GPIO_REG44, 0x08)
+            pass
         self.write_reg(ES8311_CLK_MANAGER_REG01, 0x30)
         self.write_reg(ES8311_CLK_MANAGER_REG02, 0x00)
         self.write_reg(ES8311_CLK_MANAGER_REG03, 0x10)
@@ -353,7 +363,8 @@ class ES8311:
         self.write_reg(ES8311_SYSTEM_REG0C, 0x00)
         self.write_reg(ES8311_SYSTEM_REG10, 0x1F)
         self.write_reg(ES8311_SYSTEM_REG11, 0x7F)
-
+        if self.debug:
+            print("ES8311: basic system registers initialized")
         # soft reset
         self.write_reg(ES8311_RESET_REG00, 0x80)
         time.sleep_ms(10)
@@ -365,9 +376,13 @@ class ES8311:
         else:
             regv |= 0x40
         self.write_reg(ES8311_RESET_REG00, regv)
-
+        if self.debug:
+            print("ES8311: set to %s mode" % ("slave" if slave else "master"))
+            
         # enable clocks
         self.write_reg(ES8311_CLK_MANAGER_REG01, 0x3F)
+        if self.debug:
+            print("ES8311: clocks enabled")
 
         # MCLK source: from SCLK/BCLK or from dedicated MCLK pin
         self._set_mclk_source()
@@ -386,6 +401,8 @@ class ES8311:
         self.write_reg(ES8311_ADC_REG1B, 0x0A)
         self.write_reg(ES8311_ADC_REG1C, 0x6A)
 
+        if self.debug:
+            print("ES8311: extra tuning registers I2S set")
         # I2S iface
         self.set_bits_per_sample(bits)
         self.set_format(fmt)

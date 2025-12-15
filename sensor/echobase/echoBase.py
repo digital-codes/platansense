@@ -10,6 +10,7 @@
 
 from machine import Pin, I2C, I2S
 import time
+import es8311
 from micropython import const, alloc_emergency_exception_buf
 alloc_emergency_exception_buf(100)
 
@@ -26,12 +27,6 @@ ES8311_ADDR = const(0x18)
 
 CHUNK_SIZE = const(4096)
 
-
-try:
-    # Adapt these imports to your MicroPython es8311 binding as needed
-    import es8311
-except ImportError:
-    es8311 = None  # You must provide this
 
 # IRQ globals
 i2slen, i2spos, i2sbuf, isplaying, isrecording = 0,0,None,False, False
@@ -166,6 +161,18 @@ class EchoBase:
                 freq=100_000
             )
 
+        # deinit i2s in exitsting state
+        if self.i2s is not None:
+            try:
+                self.i2s.deinit()
+            except Exception:
+                pass
+            self.i2s = None
+            self._i2s_irq = None
+
+        # init i2s before es8311            
+        self._ensure_i2s('tx')  # start in TX mode
+
         # init codec
         if not self._es8311_codec_init(sample_rate):
             return False
@@ -178,15 +185,6 @@ class EchoBase:
         self.setMicGain(0)  # ES8311_MIC_GAIN_0DB equivalent; adapt as needed
 
 
-        # deinit i2s in exitsting state
-        if self.i2s is not None:
-            try:
-                self.i2s.deinit()
-            except Exception:
-                pass
-            self.i2s = None
-            self._i2s_irq = None
-            
 
         if self.debug:
             print("EchoBase initialized")
@@ -513,7 +511,11 @@ class EchoBase:
 
             self.es_handle = es8311.ES8311(self.i2c, addr=ES8311_ADDR, debug=self.debug)
             self.es_handle.reset()
+            if self.debug:
+                print("es8311 codec reset done")
             self.es_handle.init_default(bits=16, fmt="i2s", slave=True)
+            if self.debug:
+                print("es8311 codec init done")
             self.es_handle.start(record=False) # playback
             self.es_handle.set_volume(self._spk_volume)
             self.es_handle.mute(False)

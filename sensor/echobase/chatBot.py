@@ -1,3 +1,4 @@
+import math
 import echoBase
 import adpcm
 import time 
@@ -7,6 +8,7 @@ import json
 import os
 import machine
 import neopixel
+from machine import Timer
 
 
 # check config and read key
@@ -107,6 +109,16 @@ class DisPlay:
         else:
             return
         
+    def fill_rect(self, x, y, w, h, color):
+        if self.type == "neopixel":
+            self.hardware.fill(color)
+            self.hardware.write()
+        elif self.type == "lcd":
+            col = self.convertColor(color[0],color[1],color[2])
+            self.hardware.fill_rect(x, y, w, h, col)
+        else:
+            return
+        
 
         
 RGB = DisPlay(cfdata)
@@ -116,19 +128,43 @@ def rgbFill(color):
     print("Set RGB to",color)
     RGB.fill(color)
 
+def rgbRect(x,y,w,h,color):
+    global RGB
+    print("Set Rect RGB to",color)
+    RGB.fill_rect(x,y,w,h,color)
+
+
 rgbFill((40,40,40))  # off
 
+
+# rect test with irq
+tick = 0
+def timCallback(tim):
+    global tick
+    print("Timer callback",tick)
+    rgbRect(0,tick*30,128,20,(80,0,0))
+    tick -= 1
+    if tick <= 0:
+        tim.deinit()
+
+rgbFill((0,0,60)) 
+tim0 = Timer(0)
+tick = 4
+tim0.init(period=2000, mode=Timer.PERIODIC, callback=timCallback)
+while tick > 0:
+    time.sleep(.5)
+time.sleep(2)
+rgbFill((0,0,60)) 
+
 # create audio
-eb = echoBase.EchoBase()# debug=True)
+eb = echoBase.EchoBase() #debug=True)
 eb.init(sample_rate=8000)
 eb.setShift(1)
 eb.setSpeakerVolume(100)
 
 rgbFill((40,40,0xc0))  # off
-eb.play("/media/xmas.wav") #test8000mono.wav")
-rgbFill((40,40,40))  # off
-
-
+eb.play("/media/besuch.wav") #test8000mono.wav")
+time.sleep(1)
 
 # go online
 baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
@@ -140,10 +176,11 @@ pt.connect()
 pt.join()
 if pt.state == "connected":
     print("Join OK")
-    rgbFill((40,40,40)) 
+    rgbFill((0,80,80)) 
 else:
     print("Join failed")
     rgbFill((80,0,0)) 
+    raise BaseException("Join failed")
 
 
 # record audio
@@ -151,6 +188,11 @@ print("Recording audio for upload...")
 reclen_ = 100000  # 100k ~ 6 seconds at 8kHz,16bit   
 recbuf_ = bytearray(reclen_)
 rgbFill((0,0xc0,40)) 
+rxtime = reclen_/(2*8000.0) + 0.1
+tick = round(rxtime)
+print("Expected record ticks:",tick)
+rxTimer = Timer(3)
+rxTimer.init(period=1000, mode=Timer.PERIODIC, callback=timCallback)
 eb.record(recbuf_,reclen_)
 rgbFill((40,40,40))  # off
 print("Recording done", reclen_)
@@ -241,7 +283,7 @@ for c in range(chunks):
 while eb.getPlayStatus():
     time.sleep_ms(1)
 time.sleep(1)
-rgbFill((40,40,40))  # off
+rgbFill((0,0,0))  # off
     
 pt.disconnect()
 if pt.state != "offline":
@@ -249,3 +291,4 @@ if pt.state != "offline":
 else:
     print("Disconnect OK")
         
+machine.soft_reset()
