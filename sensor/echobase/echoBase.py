@@ -30,6 +30,7 @@ CHUNK_SIZE = const(4096)
 
 # IRQ globals
 i2slen, i2spos, i2sbuf, isplaying, isrecording = 0,0,None,False, False
+irqChain = None # chained handler
 # Play IRQ stuff
 def playHandler(port):
     global i2slen, i2spos, i2sbuf, isplaying
@@ -43,6 +44,9 @@ def playHandler(port):
         mv = memoryview(i2sbuf)[i2spos:i2spos+chunk]
         port.write(mv)
         i2spos += chunk
+    # call chained handler if any
+    if irqChain is not None:
+        irqChain(i2slen)
 
 # Rec IRQ stuff
 isrecording = False
@@ -58,7 +62,9 @@ def recHandler(port):
         mv = memoryview(i2sbuf)[i2spos:i2spos+chunk]
         port.readinto(mv)
         i2spos += chunk
-
+    # call chained handler if any
+    if irqChain is not None:
+        irqChain(i2slen)
 
 class EchoBase:
     """
@@ -90,6 +96,7 @@ class EchoBase:
     """
 
     def __init__(self, i2s_id=0, debug=False):
+        global irqChain
         # codec handle / object from es8311 driver (implementation-dependent)
         self.es_handle = None
 
@@ -116,6 +123,7 @@ class EchoBase:
         self._mic_adc_volume = 100
         self._spk_volume = 90
         self._i2s_irq = None
+        irqChain = None  # chained IRQ handler, if any
         
 
     # ---------- public API ----------
@@ -335,7 +343,7 @@ class EchoBase:
 
     # --- record / play overload emulation ---
 
-    def record(self, arg1, size = None, useIrq=False):
+    def record(self, arg1, size = None, useIrq=False, chain = None):
         """
         record(buffer, size)
         record(filename, size)
@@ -344,7 +352,7 @@ class EchoBase:
           - buffer is a bytearray/memoryview
           - open() is used on filename.
         """
-           
+        global irqChain
         # record(buffer, size)
         if isinstance(arg1, (bytearray, memoryview)):
             if self.debug:
@@ -354,8 +362,13 @@ class EchoBase:
                 raise ValueError("size required for record(buffer, size)")
             if useIrq:
                 self._i2s_irq = recHandler
+                if chain is not None:
+                    irqChain = chain
+                else:
+                    irqChain = None
             else:
                 self._i2s_irq = None
+                irqChain = None
             return self._record_to_buffer(buffer, size)
         elif isinstance(arg1, str):
             if self.debug:
@@ -370,12 +383,12 @@ class EchoBase:
                 print("EchoBase.record: invalid arguments")
             return False
 
-    def play(self, arg1, size=None, useIrq=False):
+    def play(self, arg1, size=None, useIrq=False, chain = None):
         """
             play(buffer, size)
             play(filename)
         """
-            
+        global irqChain
         # play(buffer, size)
         if isinstance(arg1, (bytearray, memoryview, bytes)):
             if self.debug:
@@ -385,8 +398,13 @@ class EchoBase:
                 raise ValueError("size required for play(buffer, size)")
             if useIrq:
                 self._i2s_irq = playHandler
+                if chain is not None:
+                    irqChain = chain
+                else:
+                    irqChain = None
             else:
                 self._i2s_irq = None
+                irqChain = None
             return self._play_from_buffer(buffer, size)
 
         elif isinstance(arg1, str):

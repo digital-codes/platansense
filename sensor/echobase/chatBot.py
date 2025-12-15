@@ -188,12 +188,20 @@ print("Recording audio for upload...")
 reclen_ = 100000  # 100k ~ 6 seconds at 8kHz,16bit   
 recbuf_ = bytearray(reclen_)
 rgbFill((0,0xc0,40)) 
-rxtime = reclen_/(2*8000.0) + 0.1
-tick = round(rxtime)
-print("Expected record ticks:",tick)
-rxTimer = Timer(3)
-rxTimer.init(period=1000, mode=Timer.PERIODIC, callback=timCallback)
-eb.record(recbuf_,reclen_)
+
+#rxtime = reclen_/(2*8000.0) + 0.1
+#tick = round(rxtime)
+#print("Expected record ticks:",tick)
+#rxTimer = Timer(3)
+#rxTimer.init(period=1000, mode=Timer.PERIODIC, callback=timCallback)
+#eb.record(recbuf_,reclen_)
+def irqChain(len):
+    print("Chain: ",len)
+    
+eb.record(recbuf_,reclen_,useIrq=True, chain = irqChain)
+while eb.getRecordStatus():
+    time.sleep_ms(100)
+
 rgbFill((40,40,40))  # off
 print("Recording done", reclen_)
 # compress on upload
@@ -276,7 +284,7 @@ for c in range(chunks):
     #print("Decoded chunk data, size:", w)
     # play
     rgbFill((40,40,0xc0))  # off
-    eb.play(dtbuf[bufsel%2],w,useIrq=True)
+    eb.play(dtbuf[bufsel%2],w,useIrq=True, chain = None)
     bufsel += 1
     print("Playing chunk", c)
     
