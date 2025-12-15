@@ -121,16 +121,14 @@ rgbFill((40,40,40))  # off
 # create audio
 eb = echoBase.EchoBase()# debug=True)
 eb.init(sample_rate=8000)
-eb.setShift(0)
-eb.setSpeakerVolume(90)
+eb.setShift(1)
+eb.setSpeakerVolume(100)
 
 rgbFill((40,40,0xc0))  # off
-eb.play("/media/test8000mono.wav")
+eb.play("/media/xmas.wav") #test8000mono.wav")
 rgbFill((40,40,40))  # off
 
 
-# set format
-format = "wav"  # or "adpcm"
 
 # go online
 baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
@@ -156,7 +154,7 @@ rgbFill((0,0xc0,40))
 eb.record(recbuf_,reclen_)
 rgbFill((40,40,40))  # off
 print("Recording done", reclen_)
-# compress
+# compress on upload
 format = "adpcm"  # "wav" or "adpcm"
 if format == "adpcm":
     recbuf = bytearray(reclen_//4) # max size after decode
@@ -183,6 +181,7 @@ rgbFill((40,40,40))  # off
 print("Upload OK, name:", name)
 # overwrite name for long audio test 
 #name = "longAudio"
+# wav download 
 format = "wav"  # "wav" or "adpcm"
 while True:
     rgbFill((0xa0,0,0xa0))
@@ -200,6 +199,8 @@ bufMult = 4 if format == "adpcm" else 1
 dtbuf = [bytearray(bufMult*chunkSize),  # max size after decode
          bytearray(bufMult*chunkSize)]  # max size after decode
 bufsel = 0
+
+eb.setShift(1)
 eb.setSpeakerVolume(100)
 
 for c in range(chunks):
