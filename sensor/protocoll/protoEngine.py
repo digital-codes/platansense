@@ -52,7 +52,17 @@ class ProtoEngine:
                 if self.debug:
                     print("Waiting for network interface to become active...")
                 time.sleep(1)
-            nic.connect(self.ssid, self.pwd)
+            try:
+                nic.connect(self.ssid, self.pwd)
+            except Exception as e:
+                if self.debug:
+                    print(f"Failed to connect to network: {e}")
+                nic.disconnect()
+                nic.active(False)
+                time.sleep(1)
+                nic.active(True)
+                nic.connect(self.ssid, self.pwd)
+            
             while not nic.isconnected():
                 if self.debug:
                     print("Waiting for network connection...")
