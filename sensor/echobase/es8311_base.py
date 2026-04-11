@@ -102,6 +102,13 @@ REG14_DEFAULT = const(0x10)
 #
 # You mainly care about: 11025, 16000, 22050, 44100
 _COEFFS = {
+    #8000:(2048000,  8000,  1, 0, 1, 1, 0, 0x00, 0xFF, 2,  0x10, 0x20),
+    #16000: (4096000,  16000, 1, 0, 1, 1, 0, 0x00, 0xFF, 2,  0x10, 0x20),
+
+    8000: dict(pre_div=1, pre_multi=1, adc_div=1, dac_div=1,
+                fs_mode=0, lrck_h=0x00, lrck_l=0xFF,
+                bclk_div=4, adc_osr=0x10, dac_osr=0x20),
+
     11025: dict(pre_div=1, pre_multi=1, adc_div=1, dac_div=1,
                 fs_mode=0, lrck_h=0x00, lrck_l=0xFF,
                 bclk_div=4, adc_osr=0x10, dac_osr=0x20),

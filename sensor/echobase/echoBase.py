@@ -10,7 +10,7 @@
 
 from machine import Pin, I2C, I2S
 import time
-import es8311
+import es8311_base as es8311
 from micropython import const, alloc_emergency_exception_buf
 alloc_emergency_exception_buf(100)
 
@@ -522,7 +522,7 @@ class EchoBase:
             # Example of a high-level MicroPython-style driver API:
             #   self.es_handle = es8311.ES8311(self.i2c, addr=ES8311_ADDR)
             #   self.es_handle.init(sample_rate=sample_rate)
-            #   self.es_handle.set_voice_volume(50)
+            #   self.es_handle.setSpkVolume(50)
             #   self.es_handle.configure_microphone(digital_mic=False)
             #
             # Replace this with your actual driver calls.
@@ -535,7 +535,7 @@ class EchoBase:
             if self.debug:
                 print("es8311 codec init done")
             self.es_handle.start(record=False) # playback
-            self.es_handle.set_volume(self._spk_volume)
+            self.es_handle.setSpkVolume(self._spk_volume)
             self.es_handle.mute(False)
 
         except Exception:

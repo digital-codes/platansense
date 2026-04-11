@@ -1,5 +1,4 @@
 import echoBase
-import adpcm
 import time 
 
 
@@ -10,6 +9,7 @@ eb.play("/media/test8000mono.wav")
 #eb.record("/media/mist.bin",100000)
 
 
+import adpcm
 with open("/media/test_8000.adpcm", "rb") as f:
     raw = f.read()
 print("Read ADPCM data, size:", len(raw))
