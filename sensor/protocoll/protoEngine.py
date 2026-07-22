@@ -1,4 +1,3 @@
-import cryptolib
 import requests 
 import json
 import time
@@ -6,8 +5,10 @@ import sys
 import binascii
 if not sys.platform.lower().startswith("linux"):
     import network
+    import cryptolib
     embedded = True
 else:
+    from Crypto.Cipher import AES
     embedded = False
 
 
@@ -111,8 +112,12 @@ class ProtoEngine:
             print("Preparing challenge response...")
             print(f"Challenge: {challenge}, IV: {iv}, Key: {self.key}")
         try:
-            crypt = cryptolib.aes(bytes.fromhex(self.key),2,bytes.fromhex(iv))
-            response = crypt.encrypt(bytes.fromhex(challenge))
+            if embedded:
+                crypt = cryptolib.aes(bytes.fromhex(self.key),2,bytes.fromhex(iv))
+                response = crypt.encrypt(bytes.fromhex(challenge))
+            else:
+                crypt = AES.new(bytes.fromhex(self.key), AES.MODE_CBC, bytes.fromhex(iv))
+                response = crypt.encrypt(bytes.fromhex(challenge))
         except:
             raise ValueError("Failed to initialize AES cipher with provided key/iv.")
         payload = {"command": "challenge", "session": self.session, "id": self.id, "challenge": response.hex()}
@@ -189,8 +194,11 @@ class ProtoEngine:
 
 if __name__ == "__main__":
     if not embedded:
-        baseUrl = "http://localhost:9000"
-        # baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
+        import argparse
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-u', '--url', default='http://localhost:9000', help='Base URL for the server')
+        args = parser.parse_args()
+        baseUrl = args.url
     else:
         baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
     id = 1

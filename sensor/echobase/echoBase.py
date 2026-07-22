@@ -99,7 +99,7 @@ class EchoBase:
         global irqChain
         # codec handle / object from es8311 driver (implementation-dependent)
         self.es_handle = None
-
+            
         # I2S / I2C config
         self.i2s_id   = i2s_id
         self.i2s      = None     # machine.I2S instance
@@ -121,9 +121,12 @@ class EchoBase:
         self._pga_gain = 7
         self._mic_gain = 10
         self._mic_adc_volume = 100
-        self._spk_volume = 90
+        self._spk_volume = 10
         self._i2s_irq = None
         irqChain = None  # chained IRQ handler, if any
+
+        if self.debug:
+            print("EchoBase.__init__ completed")
         
 
     # ---------- public API ----------
