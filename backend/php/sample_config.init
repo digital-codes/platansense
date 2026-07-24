@@ -1,0 +1,25 @@
+; JWT Key
+[JWT]
+key = "some random 32 characters ..."
+relatedTo = "PlatanenSensor"
+issuedBy = "https://llama.ok-lab-karlsruhe.de"
+
+; stuff for embedded only use
+[SENSOR]
+; local ollama only
+chaturl = "http://localhost:11434/v1/chat/completions"
+chatkey = "1234" 
+chatmodel = "granite4.1:3b"
+
+; audio to text
+whisper_cmd = "whisper-cli"
+whisper_mdl = "/opt/llama/whisper/models/ggml-base-q8_0.bin"
+
+; text synthesis
+piper_cmd = "/opt/pyenvs/pipertts/bin/piper"
+piper_mdl = "/opt/pyenvs/pipertts/voices/de_DE-thorsten-low.onnx"
+
+; playing: command followed by file name
+; might need to connect to bt sometime befor playing
+bt_device = 20:0E:5A:1E:43:6C"
+play_cmd = "aplay -D bluealsa:DEV=20:0E:5A:1E:43:6C,PROFILE=a2dp,SRV=org.bluealsa"
