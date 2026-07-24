@@ -57,6 +57,15 @@ while (!$should_exit) {
     if ($data) {
         $signal = trim($data);
         echo "Signal captured: " . $signal . "\n";
+        $greeting = $dataDir = __DIR__ . "/data/greeting.wav";
+        if (file_exists($greeting)) {
+            // Play the greeting sound using the command from config
+            $play_cmd = $config['SENSOR']['play_cmd'];
+            $command = escapeshellcmd($play_cmd . ' ' . $greeting);
+            exec($command);
+        } else {
+            echo "Greeting sound file not found: " . $greeting . "\n"; 
+        }
     }
 
     socket_close($connection);
