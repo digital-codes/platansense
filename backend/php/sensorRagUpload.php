@@ -77,6 +77,7 @@ $whisper_mdl = $config["SENSOR"]["whisper_mdl"] ?? "/opt/llama/whisper/models/gg
 $piper_cmd = $config["SENSOR"]["piper_cmd"] ?? "/opt/pyenvs/pipertts/bin/piper";
 $piper_mdl = $config["SENSOR"]["piper_mdl"] ?? "/opt/pyenvs/pipertts/voices/de_DE-thorsten-low.onnx";
 
+$play_cmd = $config["SENSOR"]["play_cmd"] ?? "aplay";
 
 // ===== INPUT =====
 $input = json_decode(file_get_contents("php://input"), true);
@@ -234,9 +235,7 @@ function queryOllama($url, $model, $messages): array
 // Helper function to transcribe audio using Whisper
 function transcribeAudio($audioFile): string
 {
-    global $config;
-    $whisper_cmd = $config["SENSOR"]['whisper_cmd'] ?? 'whisper-cli';
-    $whisper_mdl = $config["SENSOR"]['whisper_mdl'] ?? '/opt/llama/whisper/models/ggml-base-q8_0.bin';
+    global $whisper_cmd, $whisper_mdl;
     $outputFile = substr($audioFile, 0, -4) . '_txt';
     $cmd = sprintf(
         $whisper_cmd . ' -m ' . $whisper_mdl . ' -otxt -of %s -f %s -l de 2>&1',
@@ -297,8 +296,7 @@ function synthesizeSpeech($text, $outputFile): bool
 // Helper function to play audio to bluetooth speaker
 function playAudio($audioFile): bool
 {
-    global $config;
-    $play_cmd = $config["SENSOR"]["play_cmd"];
+    global $play_cmd;
     $cmd = sprintf(
         $play_cmd . ' %s 2>&1',
         escapeshellarg($audioFile)
