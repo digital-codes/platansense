@@ -455,10 +455,15 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
         }
         error_log("Transcribing file: " . $audioFile, 3, "llm.log");
  
-        // Signal external program asynchronously
-        $signalCmd = "echo '" . escapeshellarg($uuid) . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
-        error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
-        @shell_exec($signalCmd);
+        // Signal external program asynchronously if 1st input in conversation
+        $conversationState = getConversationState($sensorId, $dataDir);
+        error_log("Conversation state: " . json_encode($conversationState), 3, "llm.log");
+        
+        if (empty($conversationState['messages'])) {
+            $signalCmd = "echo '" . escapeshellarg($uuid) . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
+            error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
+            @shell_exec($signalCmd);
+        }   
 
         // Transcribe audio to text using Whisper
         $transcribedText = transcribeAudio($audioFile);
@@ -598,6 +603,45 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
         exit;
     }
     
+    exit;
+}
+
+// 4) explicit stop via command "stop" with token and id
+if ($command === "data" && isset($input['id']) && isset($input['token'], $input['data'])) {
+    $token = $input['token'];
+    $identifiedBy = "Sensor_" . $input['id'];
+    
+    try {
+        if (!validateToken($token, $relatedTo, $issuedBy, $identifiedBy, $key)) {
+            throw new Exception("Invalid token");
+        }
+    } catch (Exception $e) {
+        http_response_code(401);
+        echo json_encode(["status" => "not authorized5"]);
+        exit;
+    }
+
+    $parser = new Parser(new JoseEncoder());
+    try {
+        $parsedToken = $parser->parse($token);
+    } catch (Exception $e) {
+        http_response_code(401);
+        echo json_encode(["status" => "not authorized6"]);
+        exit;
+    }
+    
+    $sensorId = $parsedToken->claims()->get('sensor');
+    
+    // Terminate conversation
+    clearConversation($sensorId, $dataDir);
+    
+    $signalCmd = "echo '" . "bye-bye" . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
+    error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
+    @shell_exec($signalCmd);
+
+
+    http_response_code(200);
+    echo json_encode(["status" => "conversation_terminated"]);
     exit;
 }
 
