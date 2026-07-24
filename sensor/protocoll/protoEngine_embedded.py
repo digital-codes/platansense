@@ -226,16 +226,18 @@ if __name__ == "__main__":
         import argparse
         parser = argparse.ArgumentParser()
         parser.add_argument('-u', '--url', default='http://localhost:8000', help='Base URL for the server')
-        parser.add_argument('-i', '--input', required=True, help='Audio file to upload (ADPCM format)')
+        parser.add_argument('-i', '--input', required=False, help='Audio file to upload (ADPCM format)')
         parser.add_argument('-f', '--format', default='adpcm', choices=['wav', 'adpcm'], help='Audio format (default: adpcm)')
         parser.add_argument('-id', '--sensor-id', type=int, default=1, help='Sensor ID (default: 1)')
         parser.add_argument('-k', '--key', default='00112233445566778899aabbccddeeff', help='Sensor key (hex)')
+        parser.add_argument('-s', '--stop', action='store_true', help='Send stop command instead of uploading audio')
         args = parser.parse_args()
         baseUrl = args.url
-        audio_file = args.input
+        audio_file = args.input if not args.stop else None
         format = args.format
         id = args.sensor_id
         key = args.key
+        stop_mode = args.stop
     else:
         baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
         audio_file = None
@@ -253,6 +255,22 @@ if __name__ == "__main__":
         print("Join failed")
         pt.disconnect()
         sys.exit(1)
+
+    # Send stop command if requested
+    if stop_mode:
+        print("Sending stop command...")
+        stop_payload = {"command": "stop", "token": pt.token, "session": pt.session, "id": pt.id}
+        try:
+            stop_resp = requests.post(pt.base_url + "/sensorRagUpload.php", json=stop_payload)
+            if stop_resp.status_code == 200:
+                print("Stop command sent successfully")
+                print(f"Response: {stop_resp.json()}")
+            else:
+                print(f"Stop command failed with status code {stop_resp.status_code}")
+        except Exception as e:
+            print(f"Error sending stop command: {e}")
+        pt.disconnect()
+        sys.exit(0)
 
     # Load audio file if specified
     if audio_file and not embedded:

@@ -615,7 +615,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
 }
 
 // 4) explicit stop via command "stop" with token and id
-if ($command === "data" && isset($input['id']) && isset($input['token'], $input['data'])) {
+if ($command === "stop" && isset($input['id']) && isset($input['token'])) {
     $token = $input['token'];
     $identifiedBy = "Sensor_" . $input['id'];
     
