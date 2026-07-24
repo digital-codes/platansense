@@ -455,6 +455,11 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
         }
         error_log("Transcribing file: " . $audioFile, 3, "llm.log");
  
+        // Signal external program asynchronously
+        $signalCmd = "echo '" . escapeshellarg($uuid) . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
+        error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
+        @shell_exec($signalCmd);
+
         // Transcribe audio to text using Whisper
         $transcribedText = transcribeAudio($audioFile);
         
