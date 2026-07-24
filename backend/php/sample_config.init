@@ -21,5 +21,5 @@ piper_mdl = "/opt/pyenvs/pipertts/voices/de_DE-thorsten-low.onnx"
 
 ; playing: command followed by file name
 ; might need to connect to bt sometime befor playing
-bt_device = 20:0E:5A:1E:43:6C"
+bt_device = "20:0E:5A:1E:43:6C"
 play_cmd = "aplay -D bluealsa:DEV=20:0E:5A:1E:43:6C,PROFILE=a2dp,SRV=org.bluealsa"
