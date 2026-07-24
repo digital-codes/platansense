@@ -277,13 +277,15 @@ function synthesizeSpeech($text, $outputFile): bool
     if (!is_dir($outputDir)) {
         mkdir($outputDir, 0755, true);
     }
-
+    
     // do not run this in background. returns only when finished
     $cmd = sprintf(
         $piper_cmd . ' -m ' . $piper_mdl . ' -i %s -f %s',
         escapeshellarg($tempTextFile),
         escapeshellarg($outputFile)
     );
+
+    error_log("Synth cmd: " . $cmd . PHP_EOL, 3, "llm.log");
 
     exec($cmd, $output, $returnCode);
     if (!$keep_files) {
