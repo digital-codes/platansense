@@ -49,6 +49,17 @@ if (!is_dir($dataDir)) {
     mkdir($dataDir, 0755, true);
 }
 
+
+// Check if signal handler is running 
+$signalHandlerRunning = shell_exec("ps aux | grep -i captureSignal.php | grep -v grep | wc -l");
+if (trim($signalHandlerRunning) == 0) {
+    // Start in background and disconnect
+    $captureScriptPath = __DIR__ . '/captureSignal.php';
+    if (file_exists($captureScriptPath)) {
+        shell_exec("nohup php {$captureScriptPath} > /dev/null 2>&1 &");
+    }
+}
+
 // Load RAG data
 $classifierPrompt = file_get_contents($dataDir . 'classifier_prompt.json');
 $classesData = file_get_contents($dataDir . 'classes.json');
@@ -335,10 +346,7 @@ function clearConversation($sensorId, $dataDir): void
 {
     $stateFile = $dataDir . $sensorId . '_conversation.json';
     if (file_exists($stateFile)) {
-        global $keep_files;
-        if (!$keep_files) {
-            @unlink($stateFile);
-        }
+        @unlink($stateFile); 
     }
 }
 
