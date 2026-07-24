@@ -234,6 +234,7 @@ function queryOllama($url, $model, $messages): array
 // Helper function to transcribe audio using Whisper
 function transcribeAudio($audioFile): string
 {
+    global $config;
     $whisper_cmd = $config["SENSOR"]['whisper_cmd'] ?? 'whisper-cli';
     $whisper_mdl = $config["SENSOR"]['whisper_mdl'] ?? '/opt/llama/whisper/models/ggml-base-q8_0.bin';
     $outputFile = substr($audioFile, 0, -4) . '_txt';
@@ -242,6 +243,7 @@ function transcribeAudio($audioFile): string
         escapeshellarg($outputFile),
         escapeshellarg($audioFile)
     );
+    error_log("Transcribing with: " . $cmd, 3, "llm.log");
 
     exec($cmd, $output, $returnCode);
 
@@ -295,10 +297,14 @@ function synthesizeSpeech($text, $outputFile): bool
 // Helper function to play audio to bluetooth speaker
 function playAudio($audioFile): bool
 {
+    global $config;
+    $play_cmd = $config["SENSOR"]["play_cmd"];
     $cmd = sprintf(
-        'aplay -D bluealsa:DEV=20:0E:5A:1E:43:6C,PROFILE=a2dp,SRV=org.bluealsa %s 2>&1',
+        $play_cmd . ' %s 2>&1',
         escapeshellarg($audioFile)
     );
+
+    error_log("Playing with: " . $cmd, 3, "llm.log");
 
     exec($cmd, $output, $returnCode);
 
@@ -447,7 +453,8 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             echo json_encode(["error" => "Failed to write audio file"]);
             exit;
         }
-        
+        error_log("Transcribing file: " . $audioFile, 3, "llm.log");
+ 
         // Transcribe audio to text using Whisper
         $transcribedText = transcribeAudio($audioFile);
         

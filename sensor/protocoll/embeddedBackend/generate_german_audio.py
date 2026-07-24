@@ -20,13 +20,13 @@ SAMPLE_SENTENCES = [
     "Wie ist das Wetter heute?",
     "Können Sie mir helfen?",
     "Was ist deine Funktion?",
-    "Erzähl mir etwas über dich.",
+    "Erzähl mir etwas über dich",
     "Stop",
     "Kannst du das wiederholen?",
     "Woher kommst du?",
     "Was können wir machen?",
-    "Ich verstehe das nicht.",
-    "Das ist sehr interesting.",
+    "Ich verstehe das nicht",
+    "Das ist sehr interesting",
     "Können wir nochmal anfangen?",
     "Wie lange arbeitest du schon hier?",
     "Was für ein Baum bist du?",
@@ -63,7 +63,7 @@ def resample_to_8000_mono(input_wav, output_wav):
         print("FFmpeg not found. Please install FFmpeg.")
         return False
 
-def generate_piper_audio(text, output_wav, voice_model="/opt/pyenvs/pipertts/voices/de_DE-thorsten-low.onnx"):
+def generate_piper_audio(text, output_wav, voice_model="/opt/pyenvs/piper/voices/de_DE-thorsten-low.onnx"):
     """Generate German audio using Piper TTS"""
     
     # Create temporary text file for Piper
@@ -73,7 +73,7 @@ def generate_piper_audio(text, output_wav, voice_model="/opt/pyenvs/pipertts/voi
     
     # Build Piper command
     cmd = [
-        '/opt/pyenvs/pipertts/bin/piper',
+        '/opt/pyenvs/piper/bin/piper',
         '-m', voice_model,
         '-i', temp_text.name,
         '-f', output_wav,
@@ -104,14 +104,14 @@ def generate_piper_audio(text, output_wav, voice_model="/opt/pyenvs/pipertts/voi
             os.unlink(temp_text.name)
         return False
     except FileNotFoundError:
-        print("Piper not found at /opt/pyenvs/pipertts/bin/piper")
+        print("Piper not found at /opt/pyenvs/piper/bin/piper")
         if os.path.exists(temp_text.name):
             os.unlink(temp_text.name)
         return False
 
 def list_piper_voices():
     """List available Piper voices"""
-    voices_dir = "/opt/pyenvs/pipertts/voices"
+    voices_dir = "/opt/pyenvs/piper/voices"
     
     if os.path.exists(voices_dir):
         voices = []
