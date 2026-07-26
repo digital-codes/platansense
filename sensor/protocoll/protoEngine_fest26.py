@@ -18,13 +18,13 @@ class ProtoEngine:
     Expects `baseUrl`, `cryptolib` and `requests` to be available in the module scope.
     Updated for RAG backend with conversation tracking.
     """
-    def __init__(self, ssid, baseUrl, id, key):
+    def __init__(self, ssid, pwd, baseUrl, id, key):
         self.base_url = baseUrl
+        self.pwd = pwd
         # current runtime state: one of "offline", "online", "joining", "connected"
         self._valid_states = {"offline", "online", "joining", "connected"}
         self.state = "offline"
         self.ssid = ssid
-        self.pwd = ""
         self.debug = False
         self.id = id
         self.key = key
@@ -57,6 +57,8 @@ class ProtoEngine:
                     print("Waiting for network interface to become active...")
                 time.sleep(1)
             try:
+                if self.debug:
+                    print(f"Connecting to network SSID: {self.ssid}, Password: {self.pwd}")
                 nic.connect(self.ssid, self.pwd)
             except Exception as e:
                 if self.debug:
@@ -174,6 +176,26 @@ class ProtoEngine:
             if self.debug:
                 print("Upload response:", result)
             return result
+
+    # send a stop command, no data
+    def stop(self):
+        """NEW: Stop command"""
+        if self.debug:
+            print("Sending stop command")
+        if self.state != "connected":
+            print("Not connected. Cannot send stop command.")
+            return {"status": "not_connected"}
+        payload = {"command": "stop", "token": self.token, "id": self.id}
+        resp = requests.post(self.base_url + "/sensorRagUpload.php", json=payload)
+        if resp.status_code != 200:
+            if self.debug:
+                print("Stop response:", resp.status_code, resp.text)
+            raise ValueError(f"Stop request failed with status code {resp.status_code}, {resp.text}.")
+        result = resp.json()
+        if self.debug:
+            print("Stop response:", result)
+        return result
+
         
     # Legacy methods for compatibility with old backend - not used with RAG
     def check(self, name, format="adpcm"):
@@ -216,187 +238,8 @@ class ProtoEngine:
             print("Download response:", result)
         return result
 
-    # new: send a stop command, no data
-    def stop(self):
-        """NEW: Stop command"""
-        if self.debug:
-            print("Sending stop command")
-        if self.state != "connected":
-            print("Not connected. Cannot send stop command.")
-            return {"status": "not_connected"}
-        payload = {"command": "stop", "token": self.token, "id": self.id}
-        resp = requests.post(self.base_url + "/sensorRagUpload.php", json=payload)
-        if resp.status_code != 200:
-            if self.debug:
-                print("Stop response:", resp.status_code, resp.text)
-            raise ValueError(f"Stop request failed with status code {resp.status_code}, {resp.text}.")
-        result = resp.json()
-        if self.debug:
-            print("Stop response:", result)
-        return result
-
-
 #a = cryptolib.aes("1234567812345678",2,b"1234123412341234")
 #x = a.encrypt(b"1234123412341234")
 #x.hex()
 #'9ae8fd02b340288a0e7bbff0f0ba54d6'
 
-if __name__ == "__main__":
-    if not embedded:
-        import argparse
-        parser = argparse.ArgumentParser()
-        parser.add_argument('-u', '--url', default='http://localhost:8000', help='Base URL for the server')
-        parser.add_argument('-i', '--input', required=False, help='Audio file to upload (ADPCM format)')
-        parser.add_argument('-f', '--format', default='adpcm', choices=['wav', 'adpcm'], help='Audio format (default: adpcm)')
-        parser.add_argument('-id', '--sensor-id', type=int, default=1, help='Sensor ID (default: 1)')
-        parser.add_argument('-k', '--key', default='00112233445566778899aabbccddeeff', help='Sensor key (hex)')
-        parser.add_argument('-s', '--stop', action='store_true', help='Send stop command instead of uploading audio')
-        args = parser.parse_args()
-        baseUrl = args.url
-        audio_file = args.input if not args.stop else None
-        format = args.format
-        id = args.sensor_id
-        key = args.key
-        stop_mode = args.stop
-    else:
-        baseUrl = "https://llama.ok-lab-karlsruhe.de/platane/php"
-        audio_file = None
-        format = "adpcm"
-        id = 1
-        key = "00112233445566778899aabbccddeeff"
-
-    pt = ProtoEngine("karlsruhe.freifunk.net", baseUrl, id, key)
-    pt.setDebug(True)
-    pt.connect()    
-    pt.join()
-    if pt.state == "connected":
-        print("Join OK")
-    else:
-        print("Join failed")
-        pt.disconnect()
-        sys.exit(1)
-
-    # Send stop command if requested
-    if stop_mode:
-        print("Sending stop command...")
-        try:
-            stop_resp = pt.stop()  # Replace "sensor_name" with the actual sensor name
-            print("Stop command sent successfully")
-            print(f"Response: {stop_resp}")
-        except Exception as e:
-            print(f"Error sending stop command: {e}")
-        pt.disconnect()
-        sys.exit(0)
-
-    # Load audio file if specified
-    if audio_file and not embedded:
-        try:
-            with open(audio_file, 'rb') as f:
-                audioData = f.read()
-            print(f"Loaded audio file: {audio_file} ({len(audioData)} bytes)")
-            
-            # Sensor always sends ADPCM format
-            if format == "adpcm":
-                # No conversion needed, upload ADPCM data directly
-                print("Format: ADPCM (sensor default format)")
-            else:
-                print(f"Warning: Sensor format is '{format}' but should be 'adpcm'")
-                print("ADPCM is the standard sensor format for this application")
-                format = "adpcm"
-                
-        except FileNotFoundError:
-            print(f"Audio file not found: {audio_file}")
-            pt.disconnect()
-            sys.exit(1)
-        except Exception as e:
-            print(f"Error loading audio file: {e}")
-            pt.disconnect()
-            sys.exit(1)
-    else:
-        print("No audio file specified, using dummy data (will not produce transcription)")
-        audioData = b'This is a test payload for encryption.'
-
-    # Upload audio data
-    print(f"Uploading audio data ({len(audioData)} bytes, format: {format})...")
-    resp = pt.upload(audioData, format=format)
-    
-    # Check response from new RAG backend
-    status = resp.get("status", None)
-    if not status:
-        print(f"Upload failed: Invalid response format")
-        print(f"Response: {resp}")
-        pt.disconnect()
-        sys.exit(1)
-    
-    print(f"\n{'='*60}")
-    print(f"RAG Processing Results")
-    print(f"{'='*60}")
-    print(f"Status: {status}")
-    print(f"UUID: {resp.get('uuid', 'N/A')}")
-    
-    # Display conversation tracking information
-    conversation_id = resp.get("conversation_id")
-    conversation_reset = resp.get("conversation_reset", False)
-    conversation_timestamp = resp.get("conversation_timestamp")
-    message_count = resp.get("message_count", 0)
-    
-    print(f"\n🔗 Conversation Tracking:")
-    print(f"  ID: {conversation_id if conversation_id else 'N/A'}")
-    print(f"  Reset: {'Yes (stop/timeout)' if conversation_reset else 'No (continued)'}")
-    if conversation_timestamp:
-        import datetime
-        dt = datetime.datetime.fromtimestamp(conversation_timestamp)
-        print(f"  Started: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  Messages: {message_count}")
-    
-    if status == "transcription_failed":
-        print(f"\n❌ Error: Audio transcription failed")
-        print(f"{'='*60}")
-    elif status == "ok":
-        # Display transcription
-        transcription = resp.get("transcription", "")
-        print(f"\n📝 Transcription:")
-        if transcription:
-            print(f"  {transcription}")
-        else:
-            print(f"  (empty)")
-        
-        # Display classification
-        classification = resp.get("classification", [])
-        print(f"\n🏷️  Classification:")
-        if classification:
-            for category in classification:
-                print(f"  - {category}")
-        else:
-            print(f"  No categories detected")
-        
-        # Display response
-        response = resp.get("response", "")
-        print(f"\n💬 AI Response:")
-        if response:
-            print(f"  {response}")
-        else:
-            print(f"  (empty)")
-        
-        # Display audio playback status
-        audio_played = resp.get("audio_played", False)
-        print(f"\n🔊 Audio Playback: {'✅ Success' if audio_played else '❌ Failed'}")
-        print(f"{'='*60}\n")
-        print("✅ Complete - Backend handled transcription, classification, and audio playback")
-        
-    elif status.startswith("failed"):
-        print(f"\n❌ Error: Processing failed")
-        error_msg = resp.get("error", "Unknown error")
-        print(f"Details: {error_msg}")
-        print(f"{'='*60}")
-    else:
-        print(f"\n⚠️  Unknown status: {status}")
-        print(f"{'='*60}")
-    
-    pt.disconnect()
-    if pt.state != "offline":
-        print("Disconnect failed")
-    else:
-        print("Disconnect OK")
-            
-    
