@@ -18,13 +18,13 @@ class ProtoEngine:
     Expects `baseUrl`, `cryptolib` and `requests` to be available in the module scope.
     Updated for RAG backend with conversation tracking.
     """
-    def __init__(self, ssid, baseUrl, id, key):
+    def __init__(self, ssid, pwd, baseUrl, id, key):
         self.base_url = baseUrl
+        self.pwd = pwd
         # current runtime state: one of "offline", "online", "joining", "connected"
         self._valid_states = {"offline", "online", "joining", "connected"}
         self.state = "offline"
         self.ssid = ssid
-        self.pwd = ""
         self.debug = False
         self.id = id
         self.key = key
@@ -57,6 +57,8 @@ class ProtoEngine:
                     print("Waiting for network interface to become active...")
                 time.sleep(1)
             try:
+                if self.debug:
+                    print(f"Connecting to network SSID: {self.ssid}, Password: {self.pwd}")
                 nic.connect(self.ssid, self.pwd)
             except Exception as e:
                 if self.debug:
@@ -216,7 +218,7 @@ class ProtoEngine:
             print("Download response:", result)
         return result
 
-    # new: send a stop command, no data
+    # send a stop command, no data
     def stop(self):
         """NEW: Stop command"""
         if self.debug:
@@ -265,7 +267,7 @@ if __name__ == "__main__":
         id = 1
         key = "00112233445566778899aabbccddeeff"
 
-    pt = ProtoEngine("karlsruhe.freifunk.net", baseUrl, id, key)
+    pt = ProtoEngine("karlsruhe.freifunk.net", "", baseUrl, id, key)
     pt.setDebug(True)
     pt.connect()    
     pt.join()
