@@ -77,6 +77,10 @@ $classes = json_decode($classesData, true);
 $prompts = json_decode($promptsData, true);
 $contexts = json_decode($contextData, true);
 
+// output rating
+$ratingPrompt = file_get_contents($dataDir . 'rating_prompt.json');
+
+
 // Configuration
 $conversationTimeoutMinutes = 2; // Default timeout in minutes
 $ollamaUrl = $config["SENSOR"]["chaturl"] ?? 'http://localhost:11434/v1/chat/completions';
@@ -471,6 +475,18 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             $signalCmd = "echo '" . escapeshellarg($uuid) . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
             error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
             @shell_exec($signalCmd);
+
+            // also set dist value in tree_status.json to 0 (close)
+            $treeStatusFile = $dataDir . 'tree_status.json';
+            // create the file if it doesn't exist
+            if (!file_exists($treeStatusFile)) {
+                file_put_contents($treeStatusFile, json_encode(['dist' => 0]));
+            } else {
+                $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
+                $treeStatus['dist'] = 0;
+                file_put_contents($treeStatusFile, json_encode($treeStatus));
+            }   
+
         }   
 
         // Transcribe audio to text using Whisper
@@ -572,6 +588,43 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
         
         saveConversationState($sensorId, $dataDir, $conversationState);
         
+        // try to get a rating for the response via rating_promt. failure is not critical
+        try {
+            $ratingMessages = [
+                ["role" => "system", "content" => $ratingPrompt],
+                ["role" => "user", "content" => "User input: " . $transcribedText . "\n\nResponse: " . $responseText]
+            ];
+            $ratingResponse = queryOllama($ollamaUrl, $ollamaModel, $ratingMessages);
+            if ($ratingResponse['status'] === 'ok') {
+                $rating = trim($ratingResponse['reply']);
+                error_log("Rating: " . $rating, 3, "llm.log");
+                // at this point, try to update "health in tree_status.json with the followong mapping:
+                // ausgezeichnet => 4, gut => 3, mittel => 2, riskant => 1, falsch => 0
+                $healthMapping = [
+                    'ausgezeichnet' => 4,
+                    'gut' => 3,
+                    'mittel' => 2,
+                    'riskant' => 1,
+                    'falsch' => 0
+                ];
+                $healthValue = $healthMapping[strtolower($rating)] ?? 3; // default to 3 if unknown
+                $treeStatusFile = $dataDir . 'tree_status.json';
+                // create the file if it doesn't exist
+                if (!file_exists($treeStatusFile)) {
+                    file_put_contents($treeStatusFile, json_encode(['health' => $healthValue]));
+                } else {
+                    $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
+                    $treeStatus['health'] = $healthValue;
+                    file_put_contents($treeStatusFile, json_encode($treeStatus));
+                }   
+            } else {
+                error_log("Rating failed: " . $ratingResponse['reply'], 3, "llm.log");
+            }
+        } catch (Exception $e) {
+            error_log("Rating exception: " . $e->getMessage(), 3, "llm.log");
+        }   
+
+
         // Synthesize response to audio using Piper
         $responseAudioFile = $audioDir . $uuid . "_response.wav";
         $synthesised = synthesizeSpeech($responseText, $responseAudioFile);
@@ -642,7 +695,18 @@ if ($command === "stop" && isset($input['id']) && isset($input['token'])) {
     
     // Terminate conversation
     clearConversation($sensorId, $dataDir);
-    
+
+    // set dist value in tree_status.json to 1 (far)
+    $treeStatusFile = $dataDir . 'tree_status.json';
+    // create the file if it doesn't exist
+    if (!file_exists($treeStatusFile)) {
+        file_put_contents($treeStatusFile, json_encode(['dist' => 1]));
+    } else {
+        $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
+        $treeStatus['dist'] = 1;
+        file_put_contents($treeStatusFile, json_encode($treeStatus));
+    }   
+    // notify external program to terminate conversation
     $signalCmd = "echo '" . "bye-bye" . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
     error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
     @shell_exec($signalCmd);
