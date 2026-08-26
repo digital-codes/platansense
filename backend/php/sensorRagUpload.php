@@ -597,7 +597,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
         try {
             $ratingMessages = [
                 ["role" => "system", "content" => $ratingPrompt],
-                ["role" => "user", "content" => "User input: " . $transcribedText . "\n\nResponse: " . $responseText]
+                ["role" => "user", "content" => $responseText]
             ];
             $ratingResponse = queryOllama($ollamaUrl, $ollamaModel, $ratingMessages);
             if ($ratingResponse['status'] === 'ok') {
