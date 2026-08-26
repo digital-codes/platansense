@@ -489,6 +489,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
                 $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
                 $treeStatus['dist'] = 0;
                 file_put_contents($treeStatusFile, json_encode($treeStatus));
+                error_log("Tree status updated to dist=0" . PHP_EOL, 3, "llm.log");
             }   
 
         }   
@@ -619,6 +620,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
                     $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
                     $treeStatus['health'] = $healthValue;
                     file_put_contents($treeStatusFile, json_encode($treeStatus));
+                    error_log("Tree status updated to health=" . $healthValue . PHP_EOL, 3, "llm.log");
                 }   
             } else {
                 error_log("Rating failed: " . $ratingResponse['reply'] . PHP_EOL, 3, "llm.log");
@@ -707,6 +709,7 @@ if ($command === "stop" && isset($input['id']) && isset($input['token'])) {
         $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
         $treeStatus['dist'] = 1;
         file_put_contents($treeStatusFile, json_encode($treeStatus));
+        error_log("Tree status updated to dist=1" . PHP_EOL, 3, "llm.log");
     }   
     // notify external program to terminate conversation
     $signalCmd = "echo '" . "bye-bye" . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
