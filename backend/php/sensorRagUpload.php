@@ -227,15 +227,15 @@ function queryOllama($url, $model, $messages): array
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
     curl_setopt($ch, CURLOPT_TIMEOUT, 60);
 
-    error_log("Request to Ollama: " . json_encode($messages), 3, "llm.log");
+    error_log("Request to Ollama: " . json_encode($messages) . PHP_EOL, 3, "llm.log");
 
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
     curl_close($ch);
 
-    error_log("Response status: $httpCode", 3, "llm.log");
-    error_log("Response: $response", 3, "llm.log");
+    error_log("Response status: $httpCode" . PHP_EOL, 3, "llm.log");
+    error_log("Response: $response" . PHP_EOL, 3, "llm.log");
 
     if ($httpCode === 200 && $response) {
         $result = json_decode($response, true);
@@ -262,20 +262,20 @@ function transcribeAudio($audioFile): string
         escapeshellarg($outputFile),
         escapeshellarg($audioFile)
     );
-    error_log("Transcribing with: " . $cmd, 3, "llm.log");
+    error_log("Transcribing with: " . $cmd . PHP_EOL, 3, "llm.log");
 
     exec($cmd, $output, $returnCode);
 
     if ($returnCode === 0 && file_exists($outputFile . '.txt')) {
         $text = trim(file_get_contents($outputFile . '.txt'));
-        // error_log("Transcribed text: " . $text);
+        error_log("Transcribed text: " . $text . PHP_EOL, 3, "llm.log");
         global $keep_files;
         if (!$keep_files) {
             @unlink($outputFile . '.txt');
         }
         return $text;
     } else {
-        error_log("Whisper transcription failed: " . implode("\n", $output));
+        error_log("Whisper transcription failed: " . implode("\n", $output) . PHP_EOL, 3, "llm.log");
     }
 
     return "";
@@ -289,8 +289,8 @@ function synthesizeSpeech($text, $outputFile): bool
     $tempTextFile = tempnam(sys_get_temp_dir(), 'piper_');
     file_put_contents($tempTextFile, $text);
 
-    error_log("Synthesizing: " . $text . " to " . $outputFile, 3, "llm.log");
-    error_log("Tempfile: " . $tempTextFile, 3, "llm.log");
+    error_log("Synthesizing: " . $text . " to " . $outputFile . PHP_EOL, 3, "llm.log");
+    error_log("Tempfile: " . $tempTextFile . PHP_EOL, 3, "llm.log");
 
 
     $outputDir = dirname($outputFile);
@@ -324,7 +324,7 @@ function playAudio($audioFile): bool
         escapeshellarg($audioFile)
     );
 
-    error_log("Playing with: " . $cmd, 3, "llm.log");
+    error_log("Playing with: " . $cmd . PHP_EOL, 3, "llm.log");
 
     exec($cmd, $output, $returnCode);
 
@@ -470,15 +470,15 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             echo json_encode(["error" => "Failed to write audio file"]);
             exit;
         }
-        error_log("Transcribing file: " . $audioFile, 3, "llm.log");
+        error_log("Transcribing file: " . $audioFile . PHP_EOL, 3, "llm.log");
  
         // Signal external program asynchronously if 1st input in conversation
         $conversationState = getConversationState($sensorId, $dataDir);
-        error_log("Conversation state: " . json_encode($conversationState), 3, "llm.log");
+        error_log("Conversation state: " . json_encode($conversationState) . PHP_EOL, 3, "llm.log");
         
         if (empty($conversationState['messages'])) {
             $signalCmd = "echo '" . escapeshellarg($uuid) . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
-            error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
+            error_log("Signalling cmd: " . $signalCmd . PHP_EOL, 3, "llm.log");
             @shell_exec($signalCmd);
 
             // also set dist value in tree_status.json to 0 (close)
@@ -601,7 +601,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             $ratingResponse = queryOllama($ollamaUrl, $ollamaModel, $ratingMessages);
             if ($ratingResponse['status'] === 'ok') {
                 $rating = trim($ratingResponse['reply']);
-                error_log("Rating: " . $rating, 3, "llm.log");
+                error_log("Rating: " . $rating . PHP_EOL, 3, "llm.log");
                 // at this point, try to update "health in tree_status.json with the followong mapping:
                 // ausgezeichnet => 4, gut => 3, mittel => 2, riskant => 1, falsch => 0
                 $healthMapping = [
@@ -611,7 +611,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
                     'riskant' => 1,
                     'falsch' => 0
                 ];
-                $healthValue = $healthMapping[strtolower($rating)] ?? 3; // default to 3 if unknown
+                $healthValue = $healthMapping[strtolower($rating)] ?? 2; // default to 2 if unknown
                 // create the file if it doesn't exist
                 if (!file_exists($treeStatusFile)) {
                     file_put_contents($treeStatusFile, json_encode(['dist' => 1, 'health' => $healthValue, "bg" => ""]));
@@ -621,10 +621,10 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
                     file_put_contents($treeStatusFile, json_encode($treeStatus));
                 }   
             } else {
-                error_log("Rating failed: " . $ratingResponse['reply'], 3, "llm.log");
+                error_log("Rating failed: " . $ratingResponse['reply'] . PHP_EOL, 3, "llm.log");
             }
         } catch (Exception $e) {
-            error_log("Rating exception: " . $e->getMessage(), 3, "llm.log");
+            error_log("Rating exception: " . $e->getMessage() . PHP_EOL, 3, "llm.log");
         }   
 
 
@@ -710,7 +710,7 @@ if ($command === "stop" && isset($input['id']) && isset($input['token'])) {
     }   
     // notify external program to terminate conversation
     $signalCmd = "echo '" . "bye-bye" . "' | /usr/bin/nc -w 1 localhost 9999 2>/dev/null &";
-    error_log("Signalling cmd: " . $signalCmd, 3, "llm.log");
+    error_log("Signalling cmd: " . $signalCmd . PHP_EOL, 3, "llm.log");
     @shell_exec($signalCmd);
 
 
