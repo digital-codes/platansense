@@ -609,7 +609,7 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
                     'ausgezeichnet' => 4,
                     'gut' => 3,
                     'mittel' => 2,
-                    'riskant' => 1,
+                    'kritisch' => 1,
                     'falsch' => 0
                 ];
                 $healthValue = $healthMapping[strtolower($rating)] ?? 2; // default to 2 if unknown
