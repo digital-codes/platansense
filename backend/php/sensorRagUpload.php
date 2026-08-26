@@ -79,6 +79,11 @@ $contexts = json_decode($contextData, true);
 
 // output rating
 $ratingPrompt = file_get_contents($dataDir . 'rating_prompt.json');
+$treeStatusFile = './tree_status.json';
+// create the file if it doesn't exist
+if (!file_exists($treeStatusFile)) {
+    file_put_contents($treeStatusFile, json_encode(['dist' => 1, 'health' => 2, "bg" => ""]));
+}   
 
 
 // Configuration
@@ -477,10 +482,9 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
             @shell_exec($signalCmd);
 
             // also set dist value in tree_status.json to 0 (close)
-            $treeStatusFile = $dataDir . 'tree_status.json';
             // create the file if it doesn't exist
             if (!file_exists($treeStatusFile)) {
-                file_put_contents($treeStatusFile, json_encode(['dist' => 0]));
+                file_put_contents($treeStatusFile, json_encode(['dist' => 0, 'health' => 2, "bg" => ""]));
             } else {
                 $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
                 $treeStatus['dist'] = 0;
@@ -608,10 +612,9 @@ if ($command === "data" && isset($input['id']) && isset($input['token'], $input[
                     'falsch' => 0
                 ];
                 $healthValue = $healthMapping[strtolower($rating)] ?? 3; // default to 3 if unknown
-                $treeStatusFile = $dataDir . 'tree_status.json';
                 // create the file if it doesn't exist
                 if (!file_exists($treeStatusFile)) {
-                    file_put_contents($treeStatusFile, json_encode(['health' => $healthValue]));
+                    file_put_contents($treeStatusFile, json_encode(['dist' => 1, 'health' => $healthValue, "bg" => ""]));
                 } else {
                     $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
                     $treeStatus['health'] = $healthValue;
@@ -697,10 +700,9 @@ if ($command === "stop" && isset($input['id']) && isset($input['token'])) {
     clearConversation($sensorId, $dataDir);
 
     // set dist value in tree_status.json to 1 (far)
-    $treeStatusFile = $dataDir . 'tree_status.json';
     // create the file if it doesn't exist
     if (!file_exists($treeStatusFile)) {
-        file_put_contents($treeStatusFile, json_encode(['dist' => 1]));
+        file_put_contents($treeStatusFile, json_encode(['dist' => 1, 'health' => 2, "bg" => ""]));
     } else {
         $treeStatus = json_decode(file_get_contents($treeStatusFile), true);
         $treeStatus['dist'] = 1;
