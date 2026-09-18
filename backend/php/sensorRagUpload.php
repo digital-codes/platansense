@@ -99,6 +99,14 @@ $piper_mdl = $config["SENSOR"]["piper_mdl"] ?? "/opt/pyenvs/pipertts/voices/de_D
 
 $play_cmd = $config["SENSOR"]["play_cmd"] ?? "aplay";
 
+/* basic play command and volume setting like so:
+aplay -D plughw:Device,0 '/var/www/html/platane/php/audio/Sensor_xyz.wav'
+amixer -c Device set 'Speaker' 40%
+
+
+*/
+
+
 // ===== INPUT =====
 $input = json_decode(file_get_contents("php://input"), true);
 if (!$input) {
